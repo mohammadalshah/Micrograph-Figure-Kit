@@ -15,7 +15,7 @@ Everything runs locally in the browser. No installation, no internet connection,
 
 **Clean & annotate**
 - Detects the SEM info footer and crops it off.
-- Finds the original scale bar (solid bars, split bars, tick rulers such as TESCAN and Hitachi S-3400) and reads its value with OCR.
+- Finds the original scale bar (solid bars, split bars, tick rulers such as JEOL, TESCAN and Hitachi S-3400) and reads its value with OCR.
 - Optical microscope images: finds a bar drawn inside the picture, including bars on a label plate.
 - **Pick bar**: drag a box around any scale bar the automatic search missed; the tool measures it, reads the label and replaces it.
 - Draws a new scale bar with a round value, in your font, size, color, thickness and position.
@@ -142,4 +142,4 @@ Bundled inside the Tesseract worker and WebAssembly core:
 
 This software is based in part on the work of the Independent JPEG Group.
 
-Instrument and software names (Hitachi, TESCAN, Oxford Instruments AZtec, Microsoft Word) are trademarks of their owners and are mentioned only to describe compatibility.
+Instrument and software names (JEOL, Hitachi, TESCAN, Oxford Instruments AZtec, Microsoft Word) are trademarks of their owners and are mentioned only to describe compatibility.
