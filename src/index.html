@@ -1,0 +1,1164 @@
+<!doctype html>
+<!--
+  Micrograph Figure Kit. Copyright (c) 2026 Mohammad Alshah, Magzhan Kutzhanov. MIT License (see LICENSE).
+  Includes open-source components under their own licenses: tesseract.js, Tesseract OCR,
+  eng.traineddata, wasm-feature-detect, idb-keyval (Apache-2.0); JSZip, UTIF.js, giflib,
+  Emscripten runtime, regenerator-runtime, is-electron, base64-js (MIT); pako (MIT and Zlib);
+  zlib (Zlib); Leptonica (BSD-2-Clause); libwebp, ieee754 (BSD-3-Clause); libpng (libpng-2.0);
+  libtiff (libtiff); libjpeg (IJG). This software is based in part on the work of the
+  Independent JPEG Group. Full license texts: THIRD_PARTY_NOTICES.md.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src data: blob:; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="description" content="Micrograph Figure Kit: software for preparing publication figures from microscope and EDS images. Runs locally in the browser." />
+  <title>Micrograph Figure Kit</title>
+  <script>try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf("semCleaner.")===0){const n="mfk."+k.slice(11);if(localStorage.getItem(n)===null)localStorage.setItem(n,localStorage.getItem(k));}}}catch(_){}</script>
+  <script>try{if(localStorage.getItem('mfk.night.v1')==='1')document.documentElement.dataset.theme='night';}catch(_){}</script>
+  <style>
+<!--@include src/styles.css-->
+</style>
+  <!-- ===== Embedded libraries (no network needed) (tesseract.js 5.1.1, JSZip 3.10.1, pako 1.0.11, UTIF 3.1.0) ===== -->
+  <script><!--@include vendor/jszip/jszip.min.js--></script>
+  <script><!--@include vendor/pako/pako.min.js--></script>
+  <script><!--@include vendor/utif/UTIF.js--></script>
+  <script><!--@include vendor/tesseract/tesseract.min.js--></script>
+  <script type="text/plain" id="offWorker"><!--@base64 vendor/tesseract/worker.min.js--></script>
+  <script type="text/plain" id="offCore"><!--@base64 vendor/tesseract/tesseract-core.js--></script>
+  <script type="text/plain" id="offLang"><!--@base64 vendor/tesseract/eng.traineddata.gz--></script>
+  <script>
+<!--@include src/js/offline-ocr.js-->
+  </script>
+</head>
+<body>
+  <!-- ============ Header with tab switcher ============ -->
+  <header class="topbar">
+    <div class="brand-wrap">
+      <div class="brand-mark" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z"/></svg></div>
+      <div>
+        <h1 style="white-space:nowrap">Micrograph Figure Kit</h1>
+        <p>Software for preparing publication figures</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button type="button" class="tab active" data-tab="clean" role="tab" aria-selected="true">1 · Clean &amp; annotate</button>
+      <button type="button" class="tab" data-tab="compose" role="tab" aria-selected="false">2 · Compose figure</button>
+      <button type="button" class="tab" data-tab="eds" role="tab" aria-selected="false">3 · EDS maps</button>
+    </nav>
+    <div style="display:flex;gap:6px;align-items:center;flex:none">
+      <button id="nightBtn" type="button" class="btn ghost" title="Night mode" aria-label="Night mode" aria-pressed="false" style="min-height:0;padding:6px 9px;display:flex;align-items:center"></button>
+      <button id="shortcutsBtn" type="button" class="btn ghost" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" style="min-height:0;padding:6px 9px;display:flex;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+      <button id="undoBtn" type="button" class="btn ghost" title="Undo (Ctrl+Z)" aria-label="Undo" style="min-height:0;padding:6px 9px;display:flex;align-items:center" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="redoBtn" type="button" class="btn ghost" title="Redo (Ctrl+Y)" aria-label="Redo" style="min-height:0;padding:6px 9px;display:flex;align-items:center" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+      <button id="sessSaveBtn" type="button" class="btn ghost" title="Save all images, crops, edits, annotations, figure layout and settings to a .json file (Ctrl+S)" aria-label="Save session" style="min-height:0;padding:6px 9px;display:flex;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 3v5h7V3"/><rect x="8" y="13" width="8" height="6" rx="1"/></svg></button>
+      <label class="btn ghost file-btn" title="Open a saved .json session and continue where you left off (Ctrl+O)" aria-label="Open session" style="min-height:0;padding:6px 9px;cursor:pointer;display:flex;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v1"/><path d="M3 7v11a2 2 0 0 0 2 2h12.5a2 2 0 0 0 1.9-1.4L22 12H7.5a2 2 0 0 0-1.9 1.4L3 20"/></svg><input id="sessOpenInput" type="file" accept=".json,application/json" /></label>
+    </div>
+    <div class="privacy-badge" title="Images are not uploaded to a server" style="white-space:nowrap;flex:none">● Local</div>
+    <button id="uiLangBtn" type="button" class="btn ghost" title="Interface language" style="min-height:0;padding:6px 12px;font-weight:800;letter-spacing:.04em;display:flex;gap:4px;align-items:center"><span data-l="en">EN</span><span style="opacity:.35">/</span><span data-l="ru">RU</span></button>
+    <button id="aboutBtn" type="button" class="btn ghost" title="About" aria-label="About" style="min-height:0;padding:6px 9px;display:flex;align-items:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/></svg></button>
+    <input id="uiLang" type="hidden" value="en" />
+  </header>
+
+  <!-- ============ Tab 1: Clean & annotate (single SEM images) ============ -->
+  <main class="layout" id="cleanView">
+    <section class="panel control-panel">
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Theme</div>
+          <span id="themeStatus" class="status-pill">saved in this browser</span>
+        </div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Saved themes</span>
+            <select id="themeSelect"><option value="__default">Default settings</option></select>
+          </label>
+          <label class="field">
+            <span>Name for a new theme</span>
+            <input id="themeName" type="text" maxlength="40" placeholder="e.g. Journal, Russian" />
+          </label>
+        </div>
+        <div class="action-row">
+          <button id="themeApply" class="btn secondary" type="button">Apply</button>
+          <button id="themeSave" class="btn ghost" type="button">Save current</button>
+          <button id="themeDelete" class="btn ghost" type="button">Delete</button>
+          <button id="themeExport" class="btn ghost" type="button">Export</button>
+          <label class="btn ghost file-btn">Import<input id="themeImport" type="file" accept=".json,application/json" /></label>
+        </div>
+        <label class="check-row">
+          <input id="themeAuto" type="checkbox" checked />
+          <span>Apply the last used theme when the tool opens</span>
+        </label>
+        <p class="hint">A theme stores scale label, unit language, decimal separator, font family, style and size, print width, panel letter text, style, size, margin and highlight, advanced bar settings, the Compose figure settings and the interface language. Save with an existing name to update it. Export a theme as a .json file to use it on another computer.</p>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h2>1. Input images</h2>
+          <p>Drag and drop image files or choose them manually.</p>
+        </div>
+        <button id="clearBtn" class="btn ghost" type="button">Clear</button>
+      </div>
+
+      <label id="dropZone" class="drop-zone" tabindex="0">
+        <input id="fileInput" type="file" multiple accept="image/bmp,image/png,image/jpeg,image/webp,image/tiff,.bmp,.png,.jpg,.jpeg,.webp,.tif,.tiff" />
+        <div class="drop-icon">＋</div>
+        <strong>Drop files here</strong>
+        <span>or click to browse</span>
+        <small>BMP, PNG, JPG, WEBP, TIFF</small>
+      </label>
+
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Brightness, contrast, sharpness</div>
+          <span id="adjName" class="status-pill">no image selected</span>
+        </div>
+        <label class="field">
+          <span>Brightness, %</span>
+          <div class="range-row"><input id="adjB" type="range" min="-100" max="100" step="1" value="0" /><input id="adjBV" type="number" min="-100" max="100" step="1" value="0" /></div>
+        </label>
+        <label class="field" style="margin-top:8px">
+          <span>Contrast, %</span>
+          <div class="range-row"><input id="adjC" type="range" min="-100" max="100" step="1" value="0" /><input id="adjCV" type="number" min="-100" max="100" step="1" value="0" /></div>
+        </label>
+        <label class="field" style="margin-top:8px">
+          <span>Sharpness, % (− soften, + sharpen)</span>
+          <div class="range-row"><input id="adjS" type="range" min="-100" max="100" step="1" value="0" /><input id="adjSV" type="number" min="-100" max="100" step="1" value="0" /></div>
+        </label>
+        <div class="action-row">
+          <button id="adjAll" class="btn ghost" type="button">Apply to all images</button>
+          <button id="adjReset" class="btn ghost" type="button">Reset</button>
+        </div>
+        <p class="hint">Changes the selected image only; the original file is not modified. The adjusted image is used in the Result, saved files and Compose figure. Scale bar, letters and text are drawn on top and are not affected.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Original/source scale value</div>
+        <label class="radio-row">
+          <input type="radio" name="scaleMode" value="ocr" checked />
+          <span><b>Auto read</b> — local OCR reads the original scale text next to the bar in the image footer (dark, gray or light footers; solid, ruler-type or segmented bars)</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="scaleMode" value="manual" />
+          <span><b>Manual source value</b> — use one original scale value for all files</span>
+        </label>
+        <div class="inline-inputs scale-inline">
+          <input id="manualScale" type="number" min="0.001" step="any" value="1" aria-label="Manual source scale value" disabled />
+          <select id="manualScaleUnitToggle" class="unit-select" aria-label="Unit" disabled><option value="nm">nm</option><option value="µm" selected>µm</option><option value="mm">mm</option><option value="m">m</option><option value="Å">Å</option><option value="nm⁻¹">nm⁻¹</option><option value="µm⁻¹">µm⁻¹</option><option value="Å⁻¹">Å⁻¹</option></select>
+          <button id="applyManualBtn" class="btn ghost" type="button" disabled>Apply</button>
+        </div>
+        <p class="hint">This value is the calibration source. The output bar length is computed from it. Example: if the original image is 1 µm and you set the output to 2 µm, the final bar becomes 2× longer automatically. Units: nm, µm, mm, m, Å. A wrong auto read can be corrected per file in <b>Calibration</b> on the right.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Scale label</div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Unit language</span>
+            <select id="unitLang">
+              <option value="en" selected>English — µm, nm</option>
+              <option value="ru">Русский — мкм, нм</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Decimal separator</span>
+            <select id="decimalSep">
+              <option value="auto" selected>Auto (comma for Russian)</option>
+              <option value="point">Point — 0.5</option>
+              <option value="comma">Comma — 0,5</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Layout</span>
+            <select id="scaleLayout">
+              <option value="textAbove" selected>Unit on top, bar below</option>
+              <option value="barAbove">Bar on top, unit below</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Bar thickness / font size</span>
+            <input id="barThickness" type="number" min="0.05" max="1" step="0.01" value="0.18" />
+          </label>
+          <label class="field">
+            <span>Bar ↔ text gap / font size</span>
+            <input id="barTextGap" type="number" min="0" max="1" step="0.01" value="0.12" />
+          </label>
+          <label class="field">
+            <span>Position</span>
+            <select id="scalePosition">
+              <option value="br" selected>Bottom right</option>
+              <option value="bl">Bottom left</option>
+              <option value="tr">Top right</option>
+              <option value="tl">Top left</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Color of bar and text</span>
+            <select id="annoColor">
+              <option value="white" selected>White</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Highlight color</span>
+            <input id="scaleHlColor" type="color" value="#000000" />
+          </label>
+          <label class="field">
+            <span>Margin, % of width</span>
+            <input id="rightMargin" type="number" min="0" max="20" step="0.1" value="1" />
+          </label>
+        </div>
+        <label class="check-row">
+          <input id="scaleHl" type="checkbox" />
+          <span>Add a background highlight behind the bar and unit for better contrast</span>
+        </label>
+        <p class="hint" id="scaleExample">Example: 0.5 µm</p>
+        <p class="hint">You can also drag the scale bar or the panel letter on the Result preview to place it anywhere on one image.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Font</div>
+          <span id="fontStatus" class="status-pill">Times New Roman / system</span>
+        </div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Font family</span>
+            <select id="fontFamily">
+              <option value="Times New Roman" selected>Times New Roman</option>
+              <option value="Cambria">Cambria</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Palatino Linotype">Palatino Linotype</option>
+              <option value="Arial">Arial</option>
+              <option value="Helvetica">Helvetica</option>
+              <option value="Calibri">Calibri</option>
+              <option value="Segoe UI">Segoe UI</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Courier New">Courier New</option>
+              <option value="__uploaded" id="uploadedFontOption" disabled>Imported font</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Style</span>
+            <select id="fontWeight">
+              <option value="700" selected>Bold</option>
+              <option value="400">Regular</option>
+              <option value="700i">Bold italic</option>
+              <option value="400i">Italic</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Unit text size</span>
+            <select id="fontSizeMode">
+              <option value="fixed" selected>Fixed size (pt, as in Word)</option>
+              <option value="image">Auto from image size</option>
+              <option value="bar">Auto from bar length</option>
+            </select>
+          </label>
+          <label class="field" id="autoFontWrap" hidden>
+            <span>Auto size, % of short side</span>
+            <input id="autoFontPct" type="number" min="1" max="20" step="0.1" value="4.5" />
+          </label>
+          <label class="field" id="fixedFontWrap">
+            <span>Size, pt</span>
+            <input id="fixedFontSize" type="number" min="1" max="200" step="0.5" value="12" />
+          </label>
+          <label class="field">
+            <span>Figure width in print, cm</span>
+            <input id="printWidth" type="number" min="1" max="100" step="0.1" value="8.5" />
+          </label>
+        </div>
+        <div class="font-actions">
+          <label class="btn ghost file-btn">
+            Import font
+            <input id="fontInput" type="file" accept=".ttf,.otf,.woff,.woff2" />
+          </label>
+          <button id="forgetFontBtn" class="btn ghost" type="button">Remove imported font</button>
+        </div>
+        <p class="hint" id="ptHint">Point sizes match Word when the figure is printed at this width (8.5 cm ≈ one journal column, 17 cm ≈ full page width).</p>
+        <p class="hint">The font applies to the unit, the panel letter and free text. An imported font file is stored only in your browser. System fonts are used if installed on this computer.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Panel letter</div>
+          <span class="status-pill">upper-left corner</span>
+        </div>
+        <label class="check-row">
+          <input id="panelEnabled" type="checkbox" />
+          <span>Add a letter (a, b, c…) to the upper-left corner of each image, in file order</span>
+        </label>
+        <div class="font-grid">
+          <label class="field">
+            <span>Text</span>
+            <input id="panelFormat" type="text" maxlength="24" value="(a)" />
+          </label>
+          <label class="field">
+            <span>Style</span>
+            <select id="panelWeight">
+              <option value="700" selected>Bold</option>
+              <option value="400">Regular</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Size, pt (0 = auto)</span>
+            <input id="panelSize" type="number" min="0" max="200" step="0.5" value="15" />
+          </label>
+          <label class="field">
+            <span>Margin, % of width</span>
+            <input id="panelMargin" type="number" min="0" max="20" step="0.1" value="1" />
+          </label>
+          <label class="field">
+            <span>Highlight color</span>
+            <input id="panelHlColor" type="color" value="#000000" />
+          </label>
+        </div>
+        <label class="check-row">
+          <input id="panelHl" type="checkbox" />
+          <span>Add a background highlight behind the letter</span>
+        </label>
+        <p class="hint">Write any text. A single letter such as <b>a</b>, <b>(a)</b>, <b>C)</b>, <b>а</b> or <b>(А)</b> continues automatically on the next images (b, c… or б, в… following GOST, without ё з й о ч ъ ы ь); any other text is used as written on every image. Override the letter of one image in <b>Scale label and panel letter on this image</b>; add free text with <b>+ Text</b> in <b>Text, shapes and arrows</b>.</p>
+      </div>
+
+      <details class="setting-card advanced">
+        <summary>Advanced settings</summary>
+        <div class="advanced-grid">
+          <label class="check-row">
+            <input id="showDetection" type="checkbox" />
+            <span>Show the detected footer boundary, original bar and label in the preview</span>
+          </label>
+          <label class="check-row">
+            <input id="ocrWarn" type="checkbox" />
+            <span>Warn about uncertain OCR readings (yellow badge)</span>
+          </label>
+          <label class="check-row">
+            <input id="ovErase" type="checkbox" />
+            <span>Erase the original scale bar in optical images</span>
+          </label>
+        </div>
+        <div class="adv-foot">
+          <button id="advDefaultBtn" class="btn ghost icon-btn" type="button" title="Detection overlay off">Default</button>
+        </div>
+      </details>
+
+      <div class="setting-card save-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Output files</div>
+          <span id="outputFolderStatus" class="status-pill">Output folder: browser default</span>
+        </div>
+        <p class="hint">Each processed image is saved as its own file, for example <code>Co-1_clean.png</code>. <b>TIFF</b>, <b>PDF</b> and <b>SVG</b> hold the same lossless image at 300 dpi. On Chrome/Edge desktop you can select an output folder once and save all files directly into it.</p>
+        <div class="action-row">
+          <button id="selectOutputFolderBtn" class="btn ghost" type="button">Select output folder</button>
+          <button id="saveAllBtn" class="btn secondary" type="button" disabled>Save all PNGs separately</button>
+        </div>
+        <div class="action-row">
+          <button id="saveAllTifBtn" class="btn ghost" type="button" disabled>Save all TIFF</button>
+          <button id="saveAllPdfBtn" class="btn ghost" type="button" disabled>Save all PDF</button>
+          <button id="saveAllSvgBtn" class="btn ghost" type="button" disabled>Save all SVG</button>
+        </div>
+      </div>
+
+      <div class="action-row sticky-actions">
+        <button id="zipBtn" class="btn secondary" type="button" disabled>Download ZIP</button>
+        <button id="auditBtn" class="btn ghost" type="button" disabled>CSV audit</button>
+      </div>
+    </section>
+
+    <section class="panel workspace-panel">
+      <div class="workspace-head" style="flex-wrap:wrap">
+        <div>
+          <h2>2. Preview and control</h2>
+          <p id="summaryText">Add at least one image.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto">
+          <div id="globalProgress" class="progress-wrap" hidden>
+            <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+            <span id="progressText">0%</span>
+          </div>
+          <div class="action-row">
+            <button id="processBtn" class="btn primary" type="button" disabled>Process all</button>
+            <button id="processNewBtn" class="btn secondary" type="button" disabled title="Only images that have not been processed yet">Process new</button>
+            <button id="processOneBtn" class="btn secondary" type="button" disabled title="Only the selected image">Process selected</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="emptyState" class="empty-state">
+        <div class="empty-graphic">μm</div>
+        <h3>No files yet</h3>
+        <p>After importing files, you will see the image list here and a before/after comparison.</p>
+      </div>
+
+      <div id="workspace" hidden>
+        <div class="file-strip-wrap">
+          <div id="fileStrip" class="file-strip"></div>
+          <div class="strip-order">
+            <span>Order: drag a file, or move the selected one</span>
+            <button id="moveLeftBtn" class="chip-run" type="button" title="Move selected image earlier">◀</button>
+            <button id="moveRightBtn" class="chip-run" type="button" title="Move selected image later">▶</button>
+            <button id="plainToggleBtn" class="chip-run" type="button" title="Pictures without footer/scale bar (schematics, photos) are shown and editable at once; other images need Process">Picture (no scale bar)</button>
+          </div>
+        </div>
+
+        <div class="preview-grid">
+          <div class="preview-card">
+            <div class="preview-title">
+              <span>Source</span>
+              <div class="title-tools">
+                <span id="sourceDims" class="mono"></span>
+                <button id="largeViewBtn" class="btn ghost icon-btn" type="button" aria-pressed="false">Large view</button>
+                <button id="cropToolBtn" class="btn ghost icon-btn" type="button" aria-pressed="false">Crop tool</button>
+              </div>
+            </div>
+            <div class="canvas-wrap checker">
+              <canvas id="sourceCanvas"></canvas>
+              <canvas id="cropLoupe" class="loupe" width="150" height="150" hidden></canvas>
+            </div>
+            <div class="preview-hint" id="sourceHint">The dimmed area is removed. With <b>Crop tool</b> on, drag an edge or corner (a magnifier shows exact pixels; edges snap to the image border and footer line, hold <b>Alt</b> to disable snapping), drag inside to move, or draw a new box outside. Arrow keys nudge the last-used edge (Shift = 10 px).</div>
+          </div>
+          <div class="preview-card result-card">
+            <div class="preview-title">
+              <span>Result</span>
+              <div class="title-tools">
+                <span id="outputDims" class="mono"></span>
+                <button id="largeViewBtn2" class="btn ghost icon-btn" type="button" aria-pressed="false">Large view</button>
+              </div>
+            </div>
+            <div class="canvas-wrap checker">
+              <canvas id="resultCanvas"></canvas>
+              <button id="ocrBadge" class="ocr-badge" type="button" hidden></button>
+            </div>
+            <div class="preview-hint">Click to select. Drag the scale bar, text, shapes and arrows to move them; drag handles to resize.</div>
+          </div>
+        </div>
+
+<details class="inspector" id="measCard" open style="margin-top:12px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px">Measurements <span id="measCount" class="status-pill">0</span></summary>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+            <button type="button" class="btn ghost icon-btn" data-meas="dist" aria-pressed="false">↔ Distance</button>
+            <button type="button" class="btn ghost icon-btn" data-meas="angle" aria-pressed="false">∠ Angle</button>
+            <button type="button" class="btn ghost icon-btn" data-meas="ellipse" aria-pressed="false">◯ Particle (ellipse)</button>
+            <button type="button" class="btn ghost icon-btn" data-meas="poly" aria-pressed="false">⬠ Polygon</button>
+          </div>
+          <p class="hint" id="measToolHint"></p>
+          <div id="measTableWrap" style="overflow-x:auto;margin-top:8px"></div>
+          <div id="measSummary" class="hint" style="margin-top:6px"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
+            <label class="check-row" style="margin:0"><input id="measShow" type="checkbox" /><span>Show on image (included in export)</span></label>
+            <span style="flex:1"></span>
+            <select id="measScope" aria-label="Table scope" style="width:auto"><option value="one" selected>This image</option><option value="all">All images</option></select>
+            <button id="measCopy" class="btn ghost icon-btn" type="button">Copy table</button>
+            <button id="measCsv" class="btn ghost icon-btn" type="button">Export CSV</button>
+            <button id="measClear" class="btn ghost icon-btn" type="button">Clear</button>
+          </div>
+          <div id="measStyleBox" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+            <div style="display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:8px"><span style="font-size:12px;font-weight:700">Measurement style on the image</span><span id="measStyleTitle" class="hint" style="margin:0"></span></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">
+              <label class="field"><span>Color</span><input id="measColor" type="color" value="#ffffff" /></label>
+              <label class="field"><span>Font</span><select id="measFont"></select></label>
+              <label class="field"><span>Size, pt (0 = auto)</span><input id="measSize" type="number" min="0" max="200" step="0.5" value="0" /></label>
+              <label class="field"><span>Line width, px (0 = auto)</span><input id="measLineW" type="number" min="0" max="100" step="0.5" value="0" /></label>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;margin-top:6px">
+              <label class="check-row" style="margin:0"><input id="measBold" type="checkbox" /><span>Bold</span></label>
+              <label class="check-row" style="margin:0"><input id="measOutline" type="checkbox" /><span>Contrast outline</span></label>
+              <span style="flex:1"></span>
+              <button id="measStyleReset" class="btn ghost icon-btn" type="button">Use the image default</button>
+              <button id="measStyleImg" class="btn ghost icon-btn" type="button">Use for all measurements on this image</button>
+              <button id="measStyleAll" class="btn ghost icon-btn" type="button">Apply style to all images</button>
+            </div>
+          </div>
+          <p class="hint">Values use the calibration of each image (µm per pixel from the original scale bar). Click a row to select a measurement, then drag its points or its label on the Result to adjust it. Ellipse and polygon give the area and the equivalent circle diameter. Area draws any outline freehand and shows its area.</p>
+        </details>
+
+        <div class="inspector">
+          <div class="inspector-grid">
+            <div class="metric"><span>Footer</span><strong id="metricFooter">—</strong></div>
+            <div class="metric"><span>Original bar</span><strong id="metricBar">—</strong></div>
+            <div class="metric"><span>OCR read</span><strong id="metricOcr">—</strong></div>
+            <div class="metric"><span>Source scale</span><strong id="metricSourceScale">—</strong></div>
+            <div class="metric"><span>Output scale</span><strong id="metricOutputScale">—</strong></div>
+            <div class="metric"><span>Output bar</span><strong id="metricOutputBar">—</strong></div>
+          </div>
+          <div id="selectedWarning" class="warning" hidden></div>
+
+          <div class="edit-block">
+            <div class="edit-block-title">Calibration (original image)</div>
+            <div class="edit-grid">
+              <label class="field wide">
+                <span>Source scale value</span>
+                <div class="scale-value-control">
+                  <input id="srcScaleInput" type="number" min="0.001" step="any" placeholder="e.g. 1" />
+                  <select id="srcScaleUnitToggle" class="unit-select" aria-label="Unit"><option value="nm">nm</option><option value="µm" selected>µm</option><option value="mm">mm</option><option value="m">m</option><option value="Å">Å</option><option value="nm⁻¹">nm⁻¹</option><option value="µm⁻¹">µm⁻¹</option><option value="Å⁻¹">Å⁻¹</option></select>
+                </div>
+              </label>
+              <label class="field">
+                <span>Original bar, px</span>
+                <input id="origBarInput" type="number" min="1" step="1" placeholder="detected" />
+              </label>
+              <button id="applySourceBtn" class="btn secondary" type="button">Apply calibration</button>
+              <button id="ocrSelectedBtn" class="btn ghost" type="button">Auto read this file</button>
+              <button id="pickBarBtn" class="btn ghost" type="button" aria-pressed="false" title="Drag a box around the scale bar and its label on the Source image. The bar is measured and the label read inside the box.">Pick bar</button>
+            </div>
+          </div>
+
+          <div class="edit-block">
+            <div class="edit-block-title">Output scale bar</div>
+            <div class="edit-grid">
+              <label class="field wide">
+                <span>Output scale value</span>
+                <div class="scale-value-control">
+                  <input id="selectedScaleInput" type="number" min="0.001" step="any" placeholder="e.g. 2" />
+                  <select id="selectedScaleUnitToggle" class="unit-select" aria-label="Unit"><option value="nm">nm</option><option value="µm" selected>µm</option><option value="mm">mm</option><option value="m">m</option><option value="Å">Å</option><option value="nm⁻¹">nm⁻¹</option><option value="µm⁻¹">µm⁻¹</option><option value="Å⁻¹">Å⁻¹</option></select>
+                </div>
+              </label>
+              <label class="field">
+                <span>Bar length, px</span>
+                <input id="selectedBarLengthInput" type="number" min="1" step="1" placeholder="auto" />
+              </label>
+              <label class="field">
+                <span>Bar thickness, px</span>
+                <input id="selectedBarThicknessInput" type="number" min="1" step="1" placeholder="auto" />
+              </label>
+              <button id="syncScaleToLengthBtn" class="btn ghost" type="button">Scale → Length</button>
+              <button id="syncLengthToScaleBtn" class="btn ghost" type="button">Length → Scale</button>
+              <button id="resetScalePosBtn" class="btn ghost" type="button" title="Put the scale bar and the panel letter back to their default corners">Reset positions</button>
+              <button id="reprocessSelectedBtn" class="btn secondary" type="button">Redraw</button>
+              <button id="downloadSelectedBtn" class="btn primary" type="button" disabled>Save selected PNG</button>
+              <button id="saveSelPdf" class="btn ghost" type="button" title="Save the selected image as PDF at its print width">PDF</button>
+              <button id="saveSelSvg" class="btn ghost" type="button" title="Save the selected image as SVG at its print width">SVG</button>
+              <button id="saveSelCsv" class="btn ghost" type="button" title="Table of all processed images: scales, calibration and sizes">CSV</button>
+            </div>
+            <p class="hint">Editing the output scale value recalculates the bar length from the original calibration. <b>Save selected PNG</b> saves only the current image. On iPhone/iPad the iOS Share Sheet is used; choose <b>Save to Files</b> or <b>Save Image</b>.</p>
+          </div>
+
+          <div class="edit-block">
+            <div class="edit-block-title">Crop</div>
+            <div class="edit-grid">
+              <label class="field"><span>Left, px</span><input id="cropX" type="number" min="0" step="1" /></label>
+              <label class="field"><span>Top, px</span><input id="cropY" type="number" min="0" step="1" /></label>
+              <label class="field"><span>Width, px</span><input id="cropW" type="number" min="8" step="1" /></label>
+              <label class="field"><span>Height, px</span><input id="cropH" type="number" min="8" step="1" /></label>
+              <label class="field">
+                <span>Aspect ratio</span>
+                <select id="cropAspect">
+                  <option value="free" selected>Free</option>
+                  <option value="1">1 : 1</option>
+                  <option value="1.3333333">4 : 3</option>
+                  <option value="0.75">3 : 4</option>
+                  <option value="1.7777778">16 : 9</option>
+                </select>
+              </label>
+              <button id="cropAutoBtn" class="btn ghost" type="button">Auto (remove footer)</button>
+              <button id="cropAllBtn" class="btn ghost" type="button">Apply crop to all</button>
+            </div>
+            <p class="hint">Cropping does not resample the image, so the scale bar calibration stays exact.</p>
+          </div>
+
+          <div class="edit-block" id="batchBlock">
+            <div class="edit-block-title">Batch apply from this image</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">
+              <label class="field" style="flex:1;min-width:200px">
+                <span>Apply to</span>
+                <select id="batchMatch">
+                  <option value="size" selected>Images of the same size</option>
+                  <option value="aspect">Images with the same aspect ratio</option>
+                  <option value="all">All other images</option>
+                </select>
+              </label>
+              <button id="batchApplyBtn" class="btn ghost" type="button">Apply</button>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px">
+              <label class="check-row"><input id="batchCrop" type="checkbox" /><span>Crop area</span></label>
+              <label class="check-row"><input id="batchAdj" type="checkbox" /><span>Brightness, contrast, sharpness</span></label>
+            </div>
+            <p class="hint" id="batchHint"></p>
+            <p class="hint">Copies the crop and picture adjustments of the selected image. For different sizes the crop is scaled proportionally.</p>
+          </div>
+
+          <div class="edit-block">
+            <div class="edit-block-title">Scale label and panel letter on this image</div>
+            <div id="lblStyleClean"></div>
+            <p class="hint">Empty fields follow the main <b>Scale label</b> and <b>Panel letter</b> settings.</p>
+          </div>
+
+          <div class="edit-block">
+            <div class="edit-block-title">Text, shapes and arrows</div>
+            <div id="addObjRow" class="add-row">
+              <button type="button" class="btn secondary icon-btn" data-add="text">+ Text</button>
+              <button type="button" class="btn ghost icon-btn" data-add="rect">▭ Rectangle</button>
+              <button type="button" class="btn ghost icon-btn" data-add="rectDashed">⬚ Dashed rectangle</button>
+              <button type="button" class="btn ghost icon-btn" data-add="ellipse">◯ Circle</button>
+              <button type="button" class="btn ghost icon-btn" data-add="ellipseDashed">◌ Dashed circle</button>
+              <button type="button" class="btn ghost icon-btn" data-add="arrow">→ Arrow</button>
+              <button type="button" class="btn ghost icon-btn" data-add="line">— Line</button>
+              <button type="button" class="btn ghost icon-btn" data-add="inset" title="Magnified view of a region. Move or resize the dashed area to choose what is enlarged.">⧉ Inset</button>
+              </div>
+            <div id="eraseRow" class="add-row" style="align-items:center;margin-top:6px">
+              <button type="button" id="objEraser" class="btn ghost icon-btn" aria-pressed="false" title="Brush eraser: paint over anything on the image. Alt+click picks the color from the image. Esc to stop.">⌫ Eraser</button>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px">Size <input id="eraseSize" type="number" min="1" max="2000" value="20" style="width:64px"> px</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px">Color <input id="eraseColor" type="color" value="#ffffff" title="Alt+click on the image to pick a color"></label>
+              <button type="button" id="eraseUndo" class="btn ghost icon-btn" title="Remove the last eraser stroke">Undo stroke</button>
+              <button type="button" id="eraseClear" class="btn ghost icon-btn" title="Remove all eraser strokes on this image">Clear erasing</button>
+            </div>
+            <div id="objList" class="obj-list"></div>
+            <div id="alignRow" class="align-row">
+              <span id="alignInfo" class="align-info">Ctrl + click texts or objects to select several</span>
+              <div class="align-btns">
+                <button type="button" class="btn ghost icon-btn" data-align="row" title="Put all on one line (same vertical center as the first selected)">═ Same line</button>
+                <button type="button" class="btn ghost icon-btn" data-align="top" title="Align top edges">⤒ Tops</button>
+                <button type="button" class="btn ghost icon-btn" data-align="bottom" title="Align bottom edges">⤓ Bottoms</button>
+                <button type="button" class="btn ghost icon-btn" data-align="col" title="Put all in one column (same horizontal center as the first selected)">║ Same column</button>
+                <button type="button" class="btn ghost icon-btn" data-align="left" title="Align left edges">⇤ Lefts</button>
+                <button type="button" class="btn ghost icon-btn" data-align="right" title="Align right edges">⇥ Rights</button>
+                <button type="button" class="btn ghost icon-btn" data-align="distH" title="Equal gaps left to right (3 or more)">↔ Distribute</button>
+                <button type="button" class="btn ghost icon-btn" data-align="distV" title="Equal gaps top to bottom (3 or more)">↕ Distribute</button>
+                <button type="button" class="btn ghost icon-btn" data-align="size" title="Give all selected texts the size of the first selected">Same text size</button>
+              </div>
+            </div>
+            <div id="objProps" class="obj-props" hidden>
+              <div class="setting-title-row">
+                <div class="setting-title" id="objTypeLabel">Text</div>
+                <div class="row-actions">
+                  <button id="objDup" class="btn ghost icon-btn" type="button">Duplicate</button>
+                  <button id="objCopyAll" class="btn ghost icon-btn" type="button">Copy to all images</button>
+                  <button id="objDel" class="btn ghost icon-btn" type="button">Delete</button>
+                </div>
+              </div>
+              <div data-for="text">
+                <div id="rtToolbar" class="rt-toolbar">
+                  <button type="button" class="rt-btn" data-wrap="b" title="Bold selection"><b>B</b></button>
+                  <button type="button" class="rt-btn" data-wrap="i" title="Italic selection"><i>I</i></button>
+                  <button type="button" class="rt-btn" data-wrap="u" title="Underline selection"><u>U</u></button>
+                  <button type="button" class="rt-btn" data-wrap="s" title="Strikethrough selection"><s>S</s></button>
+                  <button type="button" class="rt-btn" data-wrap="sup" title="Superscript">x<sup>2</sup></button>
+                  <button type="button" class="rt-btn" data-wrap="sub" title="Subscript">x<sub>2</sub></button>
+                  <span class="rt-sep"></span>
+                  <button type="button" class="rt-btn" data-ins="µ" title="Insert µ">µ</button><button type="button" class="rt-btn" data-ins="°" title="Insert °">°</button><button type="button" class="rt-btn" data-ins="±" title="Insert ±">±</button><button type="button" class="rt-btn" data-ins="×" title="Insert ×">×</button><button type="button" class="rt-btn" data-ins="·" title="Insert ·">·</button><button type="button" class="rt-btn" data-ins="Å" title="Insert Å">Å</button><button type="button" class="rt-btn" data-ins="α" title="Insert α">α</button><button type="button" class="rt-btn" data-ins="β" title="Insert β">β</button><button type="button" class="rt-btn" data-ins="γ" title="Insert γ">γ</button><button type="button" class="rt-btn" data-ins="θ" title="Insert θ">θ</button><button type="button" class="rt-btn" data-ins="λ" title="Insert λ">λ</button><button type="button" class="rt-btn" data-ins="→" title="Insert →">→</button>
+                </div>
+                <textarea id="objText" rows="2" placeholder="e.g. Co<sub>3</sub>O<sub>4</sub>"></textarea>
+              </div>
+              <div class="edit-grid">
+                <label class="field" data-for="text"><span>Font</span><select id="objFont"></select></label>
+                <label class="field" data-for="text"><span>Size, pt (0 = unit size)</span><input id="objSize" type="number" min="0" max="200" step="0.5" /></label>
+                <label class="field" data-for="text shape arrow line inset"><span>Color</span><input id="objColor" type="color" /></label>
+                <label class="field" data-for="shape arrow line inset"><span>Line width, px</span><input id="objStrokeW" type="number" min="0.5" max="200" step="0.5" /></label>
+                <label class="field" data-for="shape inset"><span>Width, px</span><input id="objW" type="number" min="4" step="1" /></label>
+                <label class="field" data-for="shape"><span>Height, px</span><input id="objH" type="number" min="4" step="1" /></label>
+                <label class="field" data-for="arrow line"><span>Length, px</span><input id="objLen" type="number" min="4" step="1" /></label>
+                <label class="field" data-for="text shape arrow line"><span>Rotation, °</span><input id="objRot" type="number" min="-360" max="360" step="1" title="Turn the object around its centre. Arrows and lines: angle of the line (0 = pointing right)" /></label>
+                <label class="field" data-for="arrow"><span>Head size, px (0 = auto)</span><input id="objHead" type="number" min="0" max="500" step="1" /></label>
+                <label class="field" data-for="shape"><span>Fill color</span><input id="objFillColor" type="color" /></label>
+                <label class="field" data-for="shape"><span>Fill opacity, %</span><input id="objFillOpacity" type="number" min="0" max="100" step="5" /></label>
+                <label class="field" data-for="text"><span>Highlight color</span><input id="objBgColor" type="color" /></label>
+                <label class="field" data-for="text shape arrow line inset"><span>Outline color</span><input id="objOutlineColor" type="color" /></label>
+              </div>
+              <div class="check-grid">
+                <label class="check-row" data-for="text"><input id="objBold" type="checkbox" /><span>Bold</span></label>
+                <label class="check-row" data-for="text"><input id="objItalic" type="checkbox" /><span>Italic</span></label>
+                <label class="check-row" data-for="text"><input id="objUnderline" type="checkbox" /><span>Underline</span></label>
+                <label class="check-row" data-for="text"><input id="objStrike" type="checkbox" /><span>Strikethrough</span></label>
+                <label class="check-row" data-for="text"><input id="objBg" type="checkbox" /><span>Background highlight</span></label>
+                <label class="check-row" data-for="shape arrow line inset"><input id="objDashed" type="checkbox" /><span>Dashed line</span></label>
+                <label class="check-row" data-for="shape"><input id="objFill" type="checkbox" /><span>Fill</span></label>
+                <label class="check-row" data-for="shape"><input id="objLock" type="checkbox" /><span>Keep square / circle</span></label>
+                <label class="check-row" data-for="arrow"><input id="objDouble" type="checkbox" /><span>Double-headed</span></label>
+                <label class="check-row" data-for="text shape arrow line inset"><input id="objOutline" type="checkbox" /><span>Contrast outline</span></label>
+                <label class="check-row" data-for="inset"><input id="objLines" type="checkbox" /><span>Connector lines</span></label>
+              </div>
+            </div>
+            <p class="hint">Click an object on the Result preview to select it, drag to move, drag the handles to resize (hold <b>Shift</b> for a square/circle or 15° arrow steps). Arrow keys nudge the selected object, <b>Delete</b> removes it. In text, select characters and use the toolbar, or type <code>&lt;sub&gt;…&lt;/sub&gt;</code>, <code>&lt;sup&gt;</code>, <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, or the shortcuts <code>H_{2}O</code>, <code>m^{2}</code>. Enter starts a new line. The panel letter is enabled in <b>Panel letter</b> on the left.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="file-table">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Status</th>
+                <th>Footer y</th>
+                <th>Original bar, px</th>
+                <th>Source scale</th>
+                <th>Output scale</th>
+                <th>Output bar, px</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fileTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ Tab 2: Compose figure (multi-panel layout) ============ -->
+  <main class="layout" id="composeView" hidden>
+    <section class="panel control-panel">
+      <div class="section-head">
+        <div>
+          <h2>1. Panels</h2>
+          <p>Processed images from the Clean &amp; annotate tab.</p>
+        </div>
+        <div style="display:flex;gap:6px"><button id="compRefreshBtn" class="btn ghost" type="button">Refresh</button><button id="compClearBtn" class="btn ghost" type="button" title="Remove all panels (also from the Clean &amp; annotate tab)">Clear</button></div>
+      </div>
+      <div id="compList" class="comp-list"></div>
+      <p class="hint">Untick a panel to leave it out. Reorder with ↑ ↓, or click one panel in the preview and then another to swap them.</p>
+
+      <div class="setting-card">
+        <div class="setting-title">Layout</div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Images per row</span>
+            <input id="compPerRow" type="text" value="2" placeholder="e.g. 2 or 3,2" />
+          </label>
+          <label class="field">
+            <span>Arrangement</span>
+            <select id="compMode">
+              <option value="justify" selected>Equal row height</option>
+              <option value="grid">Equal cells</option>
+              <option value="free">Free (drag &amp; resize)</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint">One number (e.g. <b>2</b>) gives the same count in every row; a pattern (e.g. <b>3,2</b> or <b>1,2</b>) sets each row. <b>Equal row height</b> keeps every image whole and fills the width. <b>Equal cells</b> fits each image inside identical cells. Images are never cropped or stretched, so scale bars stay exact.</p>
+        <p class="hint">Drag a panel in the preview to move it, or drag the corner handles of the selected panel to resize it (aspect ratio kept). This switches to <b>Free</b>. Panels snap to edges, centre and spacing; hold Alt to place freely.</p>
+        <button id="compResetFree" class="btn ghost" type="button" hidden>Reset free layout</button>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+          <button type="button" class="btn secondary icon-btn" data-palign="fit" title="Scale and move all panels together so they fill the figure width inside the outer margin">⤢ Fit to figure size</button>
+        </div>
+        <div id="compAlignRow" class="align-row off">
+          <span id="compAlignInfo" class="align-info">Ctrl + click panels to select several</span>
+          <div class="align-btns">
+            <button type="button" class="btn ghost icon-btn" data-palign="row" title="Put all on one line (same vertical center as the first selected)">═ Same line</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="top" title="Align top edges">⤒ Tops</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="bottom" title="Align bottom edges">⤓ Bottoms</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="col" title="Put all in one column (same horizontal center as the first selected)">║ Same column</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="left" title="Align left edges">⇤ Lefts</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="right" title="Align right edges">⇥ Rights</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="distH" title="Equal gaps left to right (3 or more)">↔ Distribute</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="distV" title="Equal gaps top to bottom (3 or more)">↕ Distribute</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="samew" title="Give all selected panels the width of the first selected">Same width</button>
+            <button type="button" class="btn ghost icon-btn" data-palign="sameh" title="Give all selected panels the height of the first selected">Same height</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Size</div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Figure width, cm</span>
+            <input id="compWidth" type="number" min="2" max="60" step="0.1" value="17" />
+          </label>
+          <label class="field">
+            <span>Resolution</span>
+            <select id="compDpi">
+              <option value="150">150 dpi</option>
+              <option value="300" selected>300 dpi</option>
+              <option value="600">600 dpi</option>
+              <option value="1200">1200 dpi</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Spacing between images, mm</span>
+            <input id="compGap" type="number" min="0" max="20" step="0.1" value="1" />
+          </label>
+          <label class="field">
+            <span>Outer margin, mm</span>
+            <input id="compMargin" type="number" min="0" max="30" step="0.1" value="0" />
+          </label>
+          <label class="field">
+            <span>Background</span>
+            <select id="compBg">
+              <option value="white" selected>White</option>
+              <option value="black">Black</option>
+              <option value="transparent">Transparent (PNG)</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint">8.5 cm ≈ one journal column, 17 cm ≈ full page width. The saved file carries this size, so Word inserts it at the right width.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Labels</div>
+        <label class="field">
+          <span>Panel letters</span>
+          <select id="compLetters">
+            <option value="renumber" selected>Renumber a, b, c… in figure order</option>
+            <option value="keep">As set in the Clean tab</option>
+            <option value="none">No panel letters</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Letter position</span>
+          <select id="compLetterPos">
+            <option value="inside" selected>Inside the image (upper-left corner)</option>
+            <option value="above">Outside, above – left</option>
+            <option value="aboveC">Outside, above – center</option>
+            <option value="aboveR">Outside, above – right</option>
+            <option value="left">Outside, left of the image</option>
+            <option value="right">Outside, right of the image</option>
+          </select>
+        </label>
+        <label class="check-row">
+          <input id="compTruePt" type="checkbox" checked />
+          <span>Keep true point sizes in the final figure (labels are redrawn for each panel's printed size)</span>
+        </label>
+        <p class="hint">Letter format, size and highlight come from <b>Panel letter</b> in the Clean tab.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Scale label and letter per panel</div>
+          <span id="lblCompName" class="status-pill">no panel selected</span>
+        </div>
+        <div id="lblStyleComp"></div>
+        <p class="hint">Click a panel on the preview (or its name in the list) to edit it. Changes are shared with the Clean tab.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Text, shapes and arrows</div>
+        <div id="compObjHost"></div>
+        <p class="hint">Drawn on the whole figure, on top of the panels (e.g. arrows pointing between panels or a frame around a region). Click an object on the preview to select it, drag to move, drag handles to resize; <b>Delete</b> removes it. Text sizes are true points in the final figure.</p>
+      </div>
+
+      <div class="action-row sticky-actions">
+        <button id="compSavePng" class="btn primary" type="button" disabled>Save PNG</button>
+        <button id="compSaveTif" class="btn secondary" type="button" disabled>Save TIFF</button>
+        <button id="compSavePdf" class="btn ghost" type="button" title="Figure as PDF at the set width">PDF</button>
+        <button id="compSaveSvg" class="btn ghost" type="button" title="Figure as SVG at the set width">SVG</button>
+        <button id="compSaveCsv" class="btn ghost" type="button" title="Table of panels: file, scale, position and printed size">CSV</button>
+        <button id="compCopy" class="btn ghost" type="button" disabled>Copy</button>
+      </div>
+    </section>
+
+    <section class="panel workspace-panel">
+      <div class="workspace-head">
+        <div>
+          <h2>2. Figure preview</h2>
+          <p id="compSummary">No panels yet.</p>
+        </div>
+      </div>
+      <div id="compEmpty" class="empty-state">
+        <div class="empty-graphic">a b</div>
+        <h3>No processed images</h3>
+        <p>Process images in the Clean &amp; annotate tab; they appear here automatically.</p>
+      </div>
+      <div id="compCard" class="preview-card" style="margin-top:12px" hidden>
+        <div class="preview-title">
+          <span>Figure</span>
+          <div class="title-tools">
+            <span id="compDims" class="mono"></span>
+            <button id="compZoomOut" class="btn ghost icon-btn" type="button" title="Zoom out (Ctrl + wheel)">−</button>
+            <button id="compZoomVal" class="btn ghost icon-btn" type="button" title="Fit to window" style="min-width:58px">Fit</button>
+            <button id="compZoomIn" class="btn ghost icon-btn" type="button" title="Zoom in (Ctrl + wheel)">+</button>
+          </div>
+        </div>
+        <div id="compWrap" class="canvas-wrap checker">
+          <canvas id="compCanvas"></canvas>
+        </div>
+        <div class="preview-hint">Click a panel, then click another panel to swap them.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ Tab 3: EDS maps (AZtec reports) ============ -->
+  <main class="layout" id="edsView" hidden>
+    <section class="panel control-panel">
+      <div class="section-head">
+        <div>
+          <h2>1. EDS input</h2>
+          <p>AZtec Word reports (.docx) or loose map images.</p>
+        </div>
+        <button id="edsClear" class="btn ghost" type="button">Clear</button>
+      </div>
+      <label id="edsDrop" class="drop-zone" tabindex="0">
+        <input id="edsFile" type="file" multiple accept=".docx,image/bmp,image/png,image/jpeg,image/webp,image/tiff,.bmp,.png,.jpg,.jpeg,.webp,.tif,.tiff" />
+        <div class="drop-icon">＋</div>
+        <strong>Drop EDS report or maps</strong>
+        <span>or click to browse</span>
+        <small>DOCX, BMP, PNG, JPG, WEBP, TIFF</small>
+      </label>
+      <p class="hint">Images inside a .docx are extracted in document order and named from their captions (e.g. <b>Fe Kα1</b>, <b>Electron Image 1</b>, <b>Map Sum Spectrum</b>). Loose images are named from the file name (e.g. <b>Fe_Ka1.png</b>). Old .doc files must be re-saved as .docx.</p>
+
+      <div id="edsList" class="comp-list"></div>
+
+      <div id="edsSelCard" class="setting-card" hidden>
+        <div class="setting-title-row">
+          <div class="setting-title">Selected image</div>
+          <span id="edsSelName" class="status-pill"></span>
+        </div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Type</span>
+            <select id="edsRole">
+              <option value="electron">Electron image</option>
+              <option value="map">Element map</option>
+              <option value="layered">Layered map</option>
+              <option value="spectrum">Spectrum</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Label color</span>
+            <input id="edsColor" type="color" value="#ffffff" />
+          </label>
+        </div>
+        <div class="rt-toolbar" id="edsLabelToolbar" style="margin-top:10px">
+          <button type="button" class="rt-btn" data-wrap="sub" title="Subscript">x<sub>2</sub></button>
+          <button type="button" class="rt-btn" data-wrap="sup" title="Superscript">x<sup>2</sup></button>
+          <button type="button" class="rt-btn" data-ins="α" title="Insert α">α</button>
+          <button type="button" class="rt-btn" data-ins="β" title="Insert β">β</button>
+        </div>
+        <label class="field">
+          <span>Label</span>
+          <input id="edsLabel" type="text" placeholder="e.g. Fe Kα1" />
+        </label>
+        <p class="hint" style="margin:4px 0 0">If the element was not recognised, type it here (e.g. <b>Cr</b> or <b>Cr Kα1</b>). Its content from <b>Element content</b> then appears on this map.</p>
+        <label class="field" style="margin-top:10px">
+          <span>Brightness, %</span>
+          <div class="range-row"><input id="edsBright" type="range" min="-100" max="100" step="1" value="0" /><input id="edsBrightN" type="number" min="-100" max="100" step="1" value="0" /></div>
+        </label>
+        <label class="field" style="margin-top:8px">
+          <span>Contrast, %</span>
+          <div class="range-row"><input id="edsContrast" type="range" min="-100" max="100" step="1" value="0" /><input id="edsContrastN" type="number" min="-100" max="100" step="1" value="0" /></div>
+        </label>
+        <label class="field" style="margin-top:8px">
+          <span>Sharpness, % (− soften, + sharpen)</span>
+          <div class="range-row"><input id="edsSharp" type="range" min="-100" max="100" step="1" value="0" /><input id="edsSharpN" type="number" min="-100" max="100" step="1" value="0" /></div>
+        </label>
+        <div class="font-actions" style="margin-top:6px">
+          <button id="edsLvAll" class="btn ghost" type="button" title="Copy brightness, contrast and sharpness of this image to all maps">Apply to all maps</button>
+        </div>
+        <div class="font-actions">
+          <button id="edsAuto" class="btn ghost" type="button">Auto levels</button>
+          <button id="edsAutoAll" class="btn ghost" type="button">Auto levels for all maps</button>
+          <button id="edsResetLv" class="btn ghost" type="button">Reset</button>
+          <button id="edsSaveOne" class="btn ghost" type="button">Save this PNG</button>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Clean-up (all images)</div>
+        <label class="check-row">
+          <input id="edsRemove" type="checkbox" checked />
+          <span>Remove software labels and scale bars burned into the images</span>
+        </label>
+        <label class="check-row">
+          <input id="edsShowBoxes" type="checkbox" />
+          <span>Show the detected areas in the preview (red)</span>
+        </label>
+        <div class="font-grid">
+          <label class="field"><span>Trim top, %</span><input id="edsTrimT" type="number" min="0" max="45" step="0.5" value="0" /></label>
+          <label class="field"><span>Trim bottom, %</span><input id="edsTrimB" type="number" min="0" max="45" step="0.5" value="0" /></label>
+          <label class="field"><span>Trim left, %</span><input id="edsTrimL" type="number" min="0" max="45" step="0.5" value="0" /></label>
+          <label class="field"><span>Trim right, %</span><input id="edsTrimR" type="number" min="0" max="45" step="0.5" value="0" /></label>
+        </div>
+        <div class="font-actions">
+          <button id="edsEraseTool" class="btn ghost" type="button" aria-pressed="false">Erase area tool</button>
+          <button id="edsEraseClear" class="btn ghost" type="button">Clear erased areas</button>
+        </div>
+        <p class="hint">If a label or bar is missed, turn on <b>Erase area tool</b> and drag a box over it on any image in the preview. The same area is erased on every image (they share the field of view), filled with the surrounding background.</p>
+        <p class="hint">The same crop is applied to the electron image and every map, so they stay aligned. Trimming does not resample, so calibration stays exact.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Element labels</div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Style</span>
+            <select id="edsLabelStyle">
+              <option value="full" selected>Element + line (Fe Kα1)</option>
+              <option value="short">Element only (Fe)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Color</span>
+            <select id="edsLabelColor">
+              <option value="map" selected>Same as map color</option>
+              <option value="white">White</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+          <label class="field"><span>Size, pt</span><input id="edsLabelPt" type="number" min="1" max="100" step="0.5" value="10" /></label>
+          <label class="field"><span>Margin, % of width</span><input id="edsMargin" type="number" min="0" max="20" step="0.5" value="3" /></label>
+          <label class="field"><span>Highlight color</span><input id="edsLabelHlColor" type="color" value="#000000" /></label>
+        </div>
+        <label class="check-row"><input id="edsLabelBold" type="checkbox" checked /><span>Bold</span></label>
+        <label class="check-row"><input id="edsLabelHl" type="checkbox" /><span>Background highlight behind the label</span></label>
+        <p class="hint">Labels sit in the upper-left corner of each map. The font family comes from the <b>Font</b> section in tab 1.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Element content</div>
+          <span id="edsQStatus" class="status-pill">no values</span>
+        </div>
+        <label class="check-row"><input id="edsQOn" type="checkbox" /><span>Write the content at the bottom center of each element map</span></label>
+        <div class="font-grid">
+          <label class="field"><span>Show</span><select id="edsQBasis"><option value="wt" selected>Weight % (wt.%)</option><option value="at">Atomic % (at.%)</option></select></label>
+          <label class="field"><span>Unit text</span><select id="edsQUnit"><option value="en" selected>wt.% / at.%</option><option value="ru">мас.% / ат.%</option><option value="pct">%</option></select></label>
+          <label class="field"><span>Decimals</span><select id="edsQDec"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option></select></label>
+          <label class="field"><span>Size, pt</span><input id="edsQPt" type="number" min="1" max="100" step="0.5" value="9" /></label>
+        </div>
+        <label class="field" style="margin-top:8px">
+          <span>Values: element, wt.%, at.% (one per line)</span>
+          <textarea id="edsQText" rows="5" spellcheck="false" placeholder="Fe 62.4 58.1&#10;Cr 18.2 18.3&#10;Ni 9.1 8.1" style="font-family:ui-monospace,monospace;font-size:12px;resize:vertical"></textarea>
+        </label>
+        <div class="font-actions">
+          <button id="edsQRead" class="btn secondary" type="button">Read from spectrum / report</button>
+        </div>
+        <p class="hint">Values come from quantification tables in the Word report or, if there are none, from text recognition of the spectrum image. Check and correct them in the box. Color, bold and highlight follow <b>Element labels</b>.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title-row">
+          <div class="setting-title">Scale bar</div>
+          <span id="edsCalStatus" class="status-pill">not calibrated</span>
+        </div>
+        <div class="font-grid" style="align-items:end">
+          <label class="field">
+            <span>Known length</span>
+            <div class="scale-value-control">
+              <input id="edsCalVal" type="number" min="0.001" step="any" placeholder="e.g. 25" />
+              <select id="edsCalUnit" class="unit-select"><option value="µm" selected>µm</option><option value="nm">nm</option></select>
+            </div>
+          </label>
+          <label class="field"><span>= px on electron image</span><input id="edsCalPx" type="number" min="1" step="1" placeholder="e.g. 180" /></label>
+        </div>
+        <div class="font-actions">
+          <button id="edsCalApply" class="btn secondary" type="button">Apply</button>
+          <button id="edsCalAuto" class="btn ghost" type="button">Auto read from electron image</button>
+        </div>
+        <div class="font-grid" style="margin-top:10px;align-items:end">
+          <label class="field">
+            <span>Show on</span>
+            <select id="edsScaleOn">
+              <option value="electron" selected>Electron image only</option>
+              <option value="all">Every image</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Bar value (empty = auto)</span>
+            <div class="scale-value-control">
+              <input id="edsScaleVal" type="number" min="0.001" step="any" placeholder="auto" />
+              <select id="edsScaleUnit" class="unit-select"><option value="µm" selected>µm</option><option value="nm">nm</option></select>
+            </div>
+          </label>
+          <label class="field"><span>Size, pt</span><input id="edsScalePt" type="number" min="1" max="100" step="0.5" value="10" /></label>
+        </div>
+        <p class="hint">Maps share the field of view of the electron image, so one calibration covers all of them (scaled by pixel size if the map resolution differs). Bar style, color and unit language follow tab 1.</p>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-title">Figure layout</div>
+        <div class="font-grid">
+          <label class="field">
+            <span>Arrangement</span>
+            <select id="edsLayout">
+              <option value="left" selected>Electron image large, maps on the right</option>
+              <option value="grid">Equal tiles, electron image first</option>
+              <option value="row">One row</option>
+            </select>
+          </label>
+          <label class="field"><span>Map columns (0 = auto)</span><input id="edsCols" type="number" min="0" max="12" step="1" value="0" /></label>
+          <label class="field"><span>Figure width, cm</span><input id="edsWidth" type="number" min="2" max="60" step="0.1" value="17" /></label>
+          <label class="field">
+            <span>Resolution</span>
+            <select id="edsDpi"><option value="150">150 dpi</option><option value="300" selected>300 dpi</option><option value="600">600 dpi</option></select>
+          </label>
+          <label class="field"><span>Spacing, mm</span><input id="edsGap" type="number" min="0" max="20" step="0.1" value="1" /></label>
+          <label class="field">
+            <span>Background</span>
+            <select id="edsBg"><option value="white" selected>White</option><option value="black">Black</option></select>
+          </label>
+        </div>
+        <p class="hint">A spectrum, if included, is placed full width below the maps.</p>
+      </div>
+
+      <div class="action-row sticky-actions">
+        <button id="edsSaveFig" class="btn primary" type="button" disabled>Save figure PNG</button>
+        <button id="edsSavePdf" class="btn ghost" type="button" title="EDS figure as PDF at the set width">PDF</button>
+        <button id="edsSaveSvg" class="btn ghost" type="button" title="EDS figure as SVG at the set width">SVG</button>
+        <button id="edsSaveCsv" class="btn ghost" type="button" title="Table of maps with their wt.% and at.% values">CSV</button>
+        <button id="edsSaveMaps" class="btn secondary" type="button" disabled>Save maps (ZIP)</button>
+        <button id="edsSendMaps" class="btn ghost" type="button" disabled>Send maps to Compose</button>
+        <button id="edsSendFig" class="btn ghost" type="button" disabled>Send figure to Compose</button>
+      </div>
+    </section>
+
+    <section class="panel workspace-panel">
+      <div class="workspace-head">
+        <div>
+          <h2>2. EDS figure preview</h2>
+          <p id="edsSummary">No images yet.</p>
+        </div>
+        <div id="edsProgress" class="progress-wrap" hidden>
+          <div class="progress-track"><div id="edsProgressBar" class="progress-bar"></div></div>
+          <span id="edsProgressText">0%</span>
+        </div>
+      </div>
+      <div id="edsEmpty" class="empty-state">
+        <div class="empty-graphic">EDS</div>
+        <h3>No EDS data yet</h3>
+        <p>Drop an AZtec Word report or element map images on the left.</p>
+      </div>
+      <div id="edsCard" class="preview-card" style="margin-top:12px" hidden>
+        <div class="preview-title">
+          <span>Figure</span>
+          <span id="edsDims" class="mono"></span>
+        </div>
+        <div class="canvas-wrap checker">
+          <canvas id="edsCanvas"></canvas>
+        </div>
+        <div class="preview-hint">Click an image to select it and adjust its label, brightness and contrast.</div>
+      </div>
+      <div id="edsWarn" class="warning" hidden></div>
+    </section>
+  </main>
+
+  <footer class="footer-note">
+    <b>Important:</b> the original files are not modified. The output is a PNG intended for publication figures. Keep the original image files separately for quantitative analysis.
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+<!--@include src/js/00-header.js-->
+<!--@include src/js/01-core.js-->
+<!--@include src/js/02-units.js-->
+<!--@include src/js/03-libraries.js-->
+<!--@include src/js/04-font-storage.js-->
+<!--@include src/js/05-decode.js-->
+<!--@include src/js/06-detection.js-->
+<!--@include src/js/07-ocr.js-->
+<!--@include src/js/08-render.js-->
+<!--@include src/js/09-ingest.js-->
+<!--@include src/js/10-inspector.js-->
+<!--@include src/js/11-downloads.js-->
+<!--@include src/js/12-rerender.js-->
+<!--@include src/js/13-canvas.js-->
+<!--@include src/js/14-clean-events.js-->
+<!--@include src/js/15-compose.js-->
+<!--@include src/js/16-label-editor.js-->
+<!--@include src/js/17-eds.js-->
+<!--@include src/js/17a-eds-quant.js-->
+<!--@include src/js/17b-eds-export.js-->
+<!--@include src/js/18-startup.js-->
+</script>
+<script>
+<!--@include src/js/20-session.js-->
+<!--@include src/js/21-history.js-->
+<!--@include src/js/22-batch.js-->
+<!--@include src/js/23-shortcuts.js-->
+<!--@include src/js/24-measure.js-->
+<!--@include src/js/25-i18n.js-->
+<!--@include src/js/26-svg-export.js-->
+<!--@include src/js/27-about.js-->
+</script>
+
+</body>
+</html>
