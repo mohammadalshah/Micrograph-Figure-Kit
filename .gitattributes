@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.gz binary
+*.png binary
+*.tif binary
+Micrograph_Figure_Kit.html linguist-generated=true -diff
+vendor/** linguist-vendored=true
