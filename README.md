@@ -1,5 +1,7 @@
 # Micrograph Figure Kit
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23318122.svg)](https://doi.org/10.5281/zenodo.23318122)
+
 Micrograph Figure Kit is software for preparing publication figures from SEM, optical microscope and EDS images. It removes the instrument info footer, reads the original scale bar, draws a clean and accurate new scale bar, and arranges images into multi-panel figures at print size and dpi.
 
 Everything runs locally in the browser. No installation, no internet connection, and no image ever leaves your computer.
@@ -91,6 +93,14 @@ node build.js --check   # reports whether the HTML file matches the source
 ```
 
 Module-by-module overview: [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md). Edit files in `src/`, then rebuild. Edits made directly in the HTML file are overwritten by the next build.
+
+## Citation
+
+If Micrograph Figure Kit contributed to a thesis, dissertation, report or presentation, please cite it as:
+
+> Alshah, M., & Kutzhanov, M. (2026). *Micrograph Figure Kit* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23318122
+
+Citation in journal articles is welcome but not required.
 
 ## License
 
