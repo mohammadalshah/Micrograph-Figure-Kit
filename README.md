@@ -105,11 +105,9 @@ Module-by-module overview: [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md). Edit file
 
 ## Citation
 
-If Micrograph Figure Kit contributed to a thesis, dissertation, report or presentation, please cite it as:
+If Micrograph Figure Kit contributed to an article, thesis, dissertation, report or presentation, please cite it as:
 
 > Alshah, M., & Kutzhanov, M. (2026). *Micrograph Figure Kit* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23318122
-
-Citation in journal articles is welcome but not required.
 
 ## License
 
