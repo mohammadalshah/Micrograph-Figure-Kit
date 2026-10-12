@@ -10,6 +10,7 @@ Everything runs locally in the browser. No installation, no internet connection,
 
 ---
 
+
 ## Features
 
 **Clean & annotate**
