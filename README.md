@@ -11,6 +11,14 @@ Everything runs locally in the browser. No installation, no internet connection,
 ---
 
 
+## Video tutorial
+
+https://github.com/user-attachments/assets/05a51b71-1267-4480-b44e-e6e452028c6e
+
+
+https://github.com/user-attachments/assets/01a5b0ca-9785-4df8-889f-1ac2fa1a53c9
+
+
 ## Features
 
 **Clean & annotate**
