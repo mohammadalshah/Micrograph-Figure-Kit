@@ -50,10 +50,35 @@ async function installFontBuffer(buffer, name = 'Imported font') {
   els.uploadedFontOption.textContent = `Imported: ${name.replace(/\.[^.]+$/, '')}`;
   return face;
 }
+// Further imported fonts: each one has its own FontFace family and its own entry in the font list.
+// The first imported font keeps the original slot ('cambria-font', value '__uploaded') so older settings still work.
+async function installExtraFont(buffer, name, id) {
+  const family='MFK-Imported-'+id, face=new FontFace(family, buffer);
+  await face.load(); document.fonts.add(face);
+  const f={id, name, value:'__up:'+id, family};
+  state.extraFonts=state.extraFonts.filter(x=>x.id!==id).concat(f);
+  let opt=els.fontFamily.querySelector(`option[value="${f.value}"]`);
+  if (!opt) { opt=document.createElement('option'); opt.value=f.value; opt.setAttribute('data-noi18n',''); els.fontFamily.appendChild(opt); }
+  opt.textContent='Imported: '+name.replace(/\.[^.]+$/, '');
+  return f;
+}
+function importedFontName(value) {
+  if (value==='__uploaded') return state.fontUploaded ? state.uploadedFontName : '';
+  return state.extraFonts.find(f=>f.value===value)?.name || '';
+}
+async function saveExtraFontList() { await idbSet('font-list', state.extraFonts.map(f=>f.id)); }
+async function removeExtraFont(id) {
+  await idbDelete('font:'+id);
+  const f=state.extraFonts.find(x=>x.id===id); state.extraFonts=state.extraFonts.filter(x=>x.id!==id);
+  if (f) els.fontFamily.querySelector(`option[value="${f.value}"]`)?.remove();
+  await saveExtraFontList();
+  return f;
+}
 function updateFontStatus() {
   fillObjFont();
   const fam = els.fontFamily.value;
-  if (fam === '__uploaded') { els.fontStatus.textContent = `${state.uploadedFontName.replace(/\.[^.]+$/, '')} / imported`; return; }
+  const imp = importedFontName(fam);
+  if (imp) { els.fontStatus.textContent = `${imp.replace(/\.[^.]+$/, '')} / imported`; return; }
   const ok = document.fonts?.check?.(`16px "${fam}"`);
   els.fontStatus.textContent = `${fam} / ${ok ? 'system' : 'not confirmed'}`;
 }
@@ -66,6 +91,10 @@ async function loadStoredFont() {
       els.fontFamily.value = '__uploaded';
     }
   } catch (e) { console.warn('Stored font:', e); }
+  try {
+    const ids = (await idbGet('font-list')) || [];
+    for (const id of ids) { const r = await idbGet('font:'+id); if (r?.blob) { try { await installExtraFont(await r.blob.arrayBuffer(), r.name || 'Imported font', id); } catch (e) { console.warn('Stored font:', e); } } }
+  } catch (e) { console.warn('Stored fonts:', e); }
   updateFontStatus();
 }
 

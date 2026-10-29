@@ -47,7 +47,7 @@ els.scalePosition.addEventListener('change',()=>{ state.items.forEach(it=>it.sca
 els.fontFamily.addEventListener('change',updateFontStatus);
 els.showDetection.onchange=()=>syncPreview(selectedItem());
 
-const globalControls=[els.unitLang,els.decimalSep,els.scaleLayout,els.scalePosition,els.annoColor,els.fontFamily,els.fontWeight,els.fontSizeMode,els.fixedFontSize,els.printWidth,els.autoFontPct,els.panelEnabled,els.panelFormat,els.panelWeight,els.panelSize,els.panelMargin,els.rightMargin,els.barThickness,els.barTextGap,els.scaleHl,els.scaleHlColor,els.panelHl,els.panelHlColor];
+const globalControls=[els.unitLang,els.decimalSep,els.scaleLayout,els.scalePosition,els.annoColor,els.fontFamily,els.fontWeight,els.fontSizeMode,els.fixedFontSize,els.printWidth,els.autoFontPct,els.panelEnabled,els.panelFormat,els.panelWeight,els.panelSize,els.panelMargin,els.rightMargin,els.barThickness,els.barTextGap,els.scaleHl,els.scaleHlColor,els.panelHl,els.panelHlColor,els.scaleOl,els.scaleOlColor,els.panelOl,els.panelOlColor];
 globalControls.forEach(el=>{
   el.addEventListener('change',()=>scheduleRerenderAll(0));
   if (el.tagName==='INPUT' && ['number','text','color'].includes(el.type)) el.addEventListener('input',()=>scheduleRerenderAll(150));
@@ -87,7 +87,7 @@ adjEls.reset.onclick=()=>{ const it=selectedItem(); if (!it) return; it.adj=null
 adjEls.all.onclick=()=>{ const it=selectedItem(); if (!it) return; const a={...(it.adj||{})}; state.items.forEach(x=>x.adj={...a}); adjChanged(state.items); showToast('Brightness, contrast and sharpness applied to all images.'); };
 
 // ---- Themes (saved settings) ----
-const THEME_IDS=['unitLang','decimalSep','scaleLayout','scalePosition','annoColor','scaleHl','scaleHlColor','rightMargin','fontFamily','fontWeight','fontSizeMode','autoFontPct','fixedFontSize','printWidth','panelEnabled','panelFormat','panelWeight','panelSize','panelMargin','panelHl','panelHlColor','barThickness','barTextGap','compPerRow','compMode','compWidth','compDpi','compGap','compMargin','compBg','compLetters','compTruePt','compLetterPos','uiLang'];
+const THEME_IDS=['unitLang','decimalSep','scaleLayout','scalePosition','annoColor','scaleHl','scaleHlColor','rightMargin','fontFamily','fontWeight','fontSizeMode','autoFontPct','fixedFontSize','printWidth','panelEnabled','panelFormat','panelWeight','panelSize','panelMargin','panelHl','panelHlColor','scaleOl','scaleOlColor','panelOl','panelOlColor','barThickness','barTextGap','compPerRow','compMode','compWidth','compDpi','compGap','compMargin','compBg','compLetters','compTruePt','compLetterPos','uiLang'];
 const THEME_KEY='mfk.themes.v1', THEME_LAST='mfk.themeLast.v1', THEME_AUTO='mfk.themeAuto.v1';
 const themeEls={sel:$('#themeSelect'),name:$('#themeName'),apply:$('#themeApply'),save:$('#themeSave'),del:$('#themeDelete'),exp:$('#themeExport'),imp:$('#themeImport'),auto:$('#themeAuto'),status:$('#themeStatus')};
 function themeCapture() {
@@ -153,19 +153,32 @@ themeEls.auto.onchange=()=>{ lsSet(THEME_AUTO,themeEls.auto.checked?'1':'0'); };
   if (auto==='1' && last && last!=='__default') { const t=themeLoad()[last]; if (t) { themeEls.name.value=last; themeEls.status.textContent=last; setTimeout(()=>themeApply(t),0); } }
 })();
 
+// Every imported font is kept: the first one in the original slot, further ones in their own slots.
 els.fontInput.onchange=async()=>{
-  const f=els.fontInput.files?.[0]; if (!f) return;
+  const files=[...(els.fontInput.files||[])]; if (!files.length) return;
+  let last=null, n=0;
   try {
-    const buf=await f.arrayBuffer();
-    await installFontBuffer(buf.slice(0),f.name);
-    await idbSet('cambria-font',{blob:new Blob([buf]),name:f.name});
-    els.fontFamily.value='__uploaded';
-    updateFontStatus();
-    showToast('Font imported and stored in this browser.');
-    rerenderAllNow();
-  } catch(e) { showToast(`Font: ${e.message}`,4000); } finally { els.fontInput.value=''; }
+    for (const f of files) {
+      const buf=await f.arrayBuffer();
+      if (!state.fontUploaded) { await installFontBuffer(buf.slice(0),f.name); await idbSet('cambria-font',{blob:new Blob([buf]),name:f.name}); last='__uploaded'; }
+      else { const id=uid(), x=await installExtraFont(buf.slice(0),f.name,id); await idbSet('font:'+id,{blob:new Blob([buf]),name:f.name}); await saveExtraFontList(); last=x.value; }
+      n++;
+    }
+  } catch(e) { showToast(`Font: ${e.message}`,4000); }
+  finally {
+    els.fontInput.value='';
+    if (last) { els.fontFamily.value=last; updateFontStatus(); rerenderAllNow(); if (n) showToast(n>1?n+' fonts imported and stored in this browser.':'Font imported and stored in this browser.'); }
+  }
 };
 els.forgetFontBtn.onclick=async()=>{
+  // The selected imported font is removed; with a system font selected, all imported fonts are removed.
+  const cur=els.fontFamily.value;
+  if (cur.startsWith('__up:')) {
+    try { await removeExtraFont(cur.slice(5)); els.fontFamily.value=state.fontUploaded?'__uploaded':'Times New Roman'; updateFontStatus(); rerenderAllNow(); showToast('Imported font removed from this browser.'); }
+    catch(e) { showToast(`Font: ${e.message}`,4000); }
+    return;
+  }
+  if (cur!=='__uploaded') for (const f of [...state.extraFonts]) { try { await removeExtraFont(f.id); } catch(_) {} }
   try {
     await idbDelete('cambria-font');
     state.fontUploaded=false; state.uploadedFontName='';
@@ -205,7 +218,7 @@ $('#moveLeftBtn').onclick=()=>{ const it=selectedItem(); if (it) moveItemBy(it.i
 $('#moveRightBtn').onclick=()=>{ const it=selectedItem(); if (it) moveItemBy(it.id,1); };
 
 // Advanced settings → Default: restore factory values and redraw.
-const ADV_DEFAULTS={showDetection:false};
+const ADV_DEFAULTS={showDetection:false, ocrWarn:false, ovErase:false};
 $('#advDefaultBtn').onclick=()=>{
   for (const [id,v] of Object.entries(ADV_DEFAULTS)) {
     const el=$('#'+id);
@@ -343,7 +356,7 @@ function makeInset(it) {
   const sw=Math.max(2,Math.round(short*0.005)), s=short*0.12, d=s*3;
   const base={color:fg, outline:false, outlineColor:fg==='#ffffff'?'#000000':'#ffffff', sw};
   const rect={...base, id:uid(), type:'rect', x:0.3-s/2/W, y:0.6-s/2/H, w:s/W, h:s/H, dashed:true, fill:false, fillColor:fg, fillOpacity:25, lock:false, insetSrc:true};
-  const inset={...base, id:uid(), type:'inset', src:rect.id, x:Math.max(0,1-(d+short*0.04)/W), y:short*0.04/H, w:d/W, h:d/H, ar:1, dashed:false, lines:true};
+  const inset={...base, id:uid(), type:'inset', src:rect.id, x:Math.max(0,1-(d+short*0.04)/W), y:short*0.04/H, w:d/W, h:d/H, ar:1, dashed:false, lines:true, fill:false, fillColor:fg, fillOpacity:25};
   return [rect, inset];
 }
 function cloneObj(o, off) {
@@ -361,6 +374,70 @@ els.addObjRow.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('clic
   objRerender(0);
   if (!it.isFigure && !renderable(it)) showToast('Added. It appears on the Result after the file is processed.');
   if (o.type==='text') setTimeout(()=>{ els.objText.focus(); els.objText.select(); }, 150);
+}));
+// Inset → separate Compose panel. The inset object stays in the source image (hidden there while its panel exists),
+// so its style can still be edited in tab 1; the dashed box stays visible and links to the panel.
+function insetCanvas(it, r) {
+  const crop=getCrop(it), base=baseCanvas(it,crop);
+  const x=Math.round(clamp(r.x,0,1)*crop.w), y=Math.round(clamp(r.y,0,1)*crop.h);
+  const w=Math.max(4,Math.min(crop.w-x,Math.round(r.w*crop.w))), h=Math.max(4,Math.min(crop.h-y,Math.round(r.h*crop.h)));
+  const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(base,x,y,w,h,0,0,w,h);
+  return {c, key:[crop.x,crop.y,crop.w,crop.h,x,y,w,h,JSON.stringify(it.adj||{})].join(',')};
+}
+function insetSent(o) { return !!(o?.sent && state.items.some(i=>i.id===o.sent)); }
+function insetToCompose(it, o, letter) {
+  const r=it?.objects?.find(q=>q.id===o?.src); if (!r || it.isFigure || !it.imageData) return null;
+  const {c,key}=insetCanvas(it,r);
+  const nm=(it.name||'image').replace(/\.[^.]+$/,'')+' – inset.png';
+  const item=edsMakeItem(nm, c, {fromEds:false, edsBatch:null, ocrRaw:'(inset)', insetOf:it.id, insetLink:{inset:o.id, rect:r.id}, insetKey:key, noPanel:!letter, showPanel:!!letter});
+  try { renderInto(item); } catch (_) { return null; }
+  o.sent=item.id; it.selObj=null; try { renderInto(it); } catch (_) {}
+  const at=state.items.indexOf(it); state.items.splice(at>=0?at+1:state.items.length,0,item);
+  return item;
+}
+function insetSendAll(it, letter) { let n=0; for (const o of (it?.objects||[]).filter(q=>q.type==='inset' && !insetSent(q))) if (insetToCompose(it,o,letter)) n++; return n; }
+// Rebuild inset panels whose source area or image changed in tab 1 (all of them when force).
+function insetRefreshSent(force) {
+  let n=0;
+  for (const item of state.items) {
+    if (!item.insetLink) continue;
+    const it=state.items.find(x=>x.id===item.insetOf), r=it?.objects?.find(q=>q.id===item.insetLink.rect);
+    if (!r || !it.imageData) continue;
+    const {c,key}=insetCanvas(it,r); if (!force && key===item.insetKey) continue;
+    item.imageData=c.getContext('2d').getImageData(0,0,c.width,c.height); item.analysis={...(item.analysis||{}), footerY:c.height};
+    item.crop=null; item._base=null; item._src=null; item._erased=null; item.insetKey=key;
+    try { renderInto(item); } catch (_) {}
+    n++;
+  }
+  return n;
+}
+// Inset drawn on the whole Compose figure: move its area into the panel under it, then send it like a tab-1 inset.
+function figureInsetToCompose(o, letter) {
+  const doc=compose.doc, r=doc.objects.find(q=>q.id===o.src), cv=compose.canvas; if (!r || !cv) return null;
+  const W=cv.width, H=cv.height, cx=(r.x+r.w/2)*W, cy=(r.y+r.h/2)*H;
+  const cell=compose.cells.find(c=>cx>=c.dx && cx<=c.dx+c.dw && cy>=c.dy && cy<=c.dy+c.dh); if (!cell) return null;
+  const it=cell.it, crop=getCrop(it), k=crop.w/Math.max(1,cell.dw);
+  const x0=clamp((r.x*W-cell.dx)/cell.dw,0,1), y0=clamp((r.y*H-cell.dy)/cell.dh,0,1);
+  const x1=clamp((r.x*W+r.w*W-cell.dx)/cell.dw,0,1), y1=clamp((r.y*H+r.h*H-cell.dy)/cell.dh,0,1);
+  if (x1-x0<=0 || y1-y0<=0) return null;
+  const rect={...r, id:uid(), x:x0, y:y0, w:x1-x0, h:y1-y0, sw:Math.max(0.5,(r.sw||2)*k)};
+  const ins={...o, id:uid(), src:rect.id, sw:Math.max(0.5,(o.sw||2)*k), x:0.6, y:0.05, w:0.35, h:0.35};
+  it.objects=it.objects||[]; it.objects.push(rect,ins);
+  const item=insetToCompose(it,ins,letter);
+  if (!item) { it.objects=it.objects.filter(q=>q!==rect && q!==ins); return null; }
+  doc.objects=doc.objects.filter(q=>q!==o && q!==r); doc.selObj=null;
+  return item;
+}
+document.querySelectorAll('[data-inset-send]').forEach(b=>b.addEventListener('click',()=>{
+  const it=objTarget(), o=selObj(it); if (!o || o.type!=='inset') return;
+  const letter=b.dataset.insetSend==='letter';
+  if (it.isFigure) {
+    if (!figureInsetToCompose(o,letter)) { showToast('Place the inset area over one panel to make it a separate image.',4200); return; }
+    renderUI(); renderCompose(); showToast('Inset moved to Compose figure as a separate panel; connector lines link it to the dashed box.',4200); return;
+  }
+  const item=insetToCompose(it,o,letter);
+  if (!item) { showToast('The inset area could not be read. Process the image first.'); return; }
+  renderUI(); showToast('Inset moved to Compose figure as a separate panel; connector lines link it to the dashed box.',4200);
 }));
 // Bind a property field to the selected object.
 function bindProp(el, fn, ev) {
@@ -392,6 +469,7 @@ bindProp(els.objLen, (o,it)=>{
 bindProp(els.objLock, (o,it)=>{ o.lock=els.objLock.checked; if (o.lock) { const cr=objDims(it), side=Math.max(o.w*cr.w,o.h*cr.h); o.w=side/cr.w; o.h=side/cr.h; } }, 'change');
 els.rtToolbar.querySelectorAll('button').forEach(b=>{
   b.addEventListener('mousedown', e=>e.preventDefault());
+  if (b.hasAttribute('data-greek-toggle')) { b.addEventListener('click',()=>rtGreekToggle(b)); return; }
   b.addEventListener('click', ()=>{
     const ta=els.objText, st=ta.selectionStart, en=ta.selectionEnd, v=ta.value;
     if (b.dataset.ins) {

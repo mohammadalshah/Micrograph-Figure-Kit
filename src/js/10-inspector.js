@@ -204,7 +204,7 @@ function objLabel(o) {
     return 'T  '+(t.length>18?t.slice(0,18)+'…':(t||'(empty)'));
   }
   if (o.insetSrc) return 'Inset area';
-  if (o.type==='inset') return 'Inset';
+  if (o.type==='inset') return insetSent(o) ? 'Inset (in Compose)' : 'Inset';
   return o.dashed ? 'Dashed '+OBJ_NAMES[o.type].toLowerCase() : OBJ_NAMES[o.type];
 }
 // text / shape / arrow / line — decides which property fields are shown.
@@ -248,7 +248,9 @@ function syncObjProps(item) {
     setVal(els.objW,Math.round(o.w*cr.w)); setVal(els.objH,Math.round(o.h*cr.h));
     setChk(els.objFill,o.fill); setVal(els.objFillColor,o.fillColor); setVal(els.objFillOpacity,o.fillOpacity); setChk(els.objLock,o.lock);
   }
-  if (g==='inset') { setVal(els.objW,Math.round(o.w*cr.w)); setChk(document.getElementById('objLines'),o.lines!==false); }
+  if (g==='inset') { setVal(els.objW,Math.round(o.w*cr.w)); setChk(document.getElementById('objLines'),o.lines!==false);
+    setChk(els.objFill,o.fill); setVal(els.objFillColor,o.fillColor||o.color); setVal(els.objFillOpacity,o.fillOpacity??25);
+    const sr=document.getElementById('insetSendRow'); if (sr && insetSent(o)) sr.hidden=true; }
   if (g==='arrow'||g==='line') setVal(els.objLen,Math.round(Math.hypot((o.x2-o.x1)*cr.w,(o.y2-o.y1)*cr.h)));
   if (g==='arrow') { setVal(els.objHead,o.head||0); setChk(els.objDouble,o.double); }
   if (g==='arrow'||g==='line') setVal(els.objRot,Math.round(Math.atan2(-(o.y2-o.y1)*cr.h,(o.x2-o.x1)*cr.w)*180/Math.PI));

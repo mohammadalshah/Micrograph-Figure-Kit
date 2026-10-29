@@ -12,7 +12,7 @@ const els = {
   dropZone: $('#dropZone'), fileInput: $('#fileInput'), clearBtn: $('#clearBtn'),
   processBtn: $('#processBtn'), processNewBtn: $('#processNewBtn'), processOneBtn: $('#processOneBtn'), saveAllBtn: $('#saveAllBtn'), selectOutputFolderBtn: $('#selectOutputFolderBtn'), outputFolderStatus: $('#outputFolderStatus'), zipBtn: $('#zipBtn'), auditBtn: $('#auditBtn'),
   manualScale: $('#manualScale'), manualScaleUnitToggle: $('#manualScaleUnitToggle'), applyManualBtn: $('#applyManualBtn'),
-  unitLang: $('#unitLang'), decimalSep: $('#decimalSep'), scaleLayout: $('#scaleLayout'), scalePosition: $('#scalePosition'), annoColor: $('#annoColor'), scaleExample: $('#scaleExample'), scaleHl: $('#scaleHl'), scaleHlColor: $('#scaleHlColor'), panelHl: $('#panelHl'), panelHlColor: $('#panelHlColor'),
+  unitLang: $('#unitLang'), decimalSep: $('#decimalSep'), scaleLayout: $('#scaleLayout'), scalePosition: $('#scalePosition'), annoColor: $('#annoColor'), scaleExample: $('#scaleExample'), scaleHl: $('#scaleHl'), scaleHlColor: $('#scaleHlColor'), panelHl: $('#panelHl'), panelHlColor: $('#panelHlColor'), scaleOl: $('#scaleOl'), scaleOlColor: $('#scaleOlColor'), panelOl: $('#panelOl'), panelOlColor: $('#panelOlColor'),
   fontInput: $('#fontInput'), forgetFontBtn: $('#forgetFontBtn'), fontStatus: $('#fontStatus'), fontFamily: $('#fontFamily'), uploadedFontOption: $('#uploadedFontOption'),
   fontWeight: $('#fontWeight'), fontSizeMode: $('#fontSizeMode'), fixedFontWrap: $('#fixedFontWrap'), fixedFontSize: $('#fixedFontSize'), printWidth: $('#printWidth'), ptHint: $('#ptHint'), autoFontWrap: $('#autoFontWrap'), autoFontPct: $('#autoFontPct'),
   panelEnabled: $('#panelEnabled'), panelFormat: $('#panelFormat'), panelWeight: $('#panelWeight'), panelSize: $('#panelSize'), panelMargin: $('#panelMargin'),
@@ -45,6 +45,7 @@ const state = {
   busy: false,
   fontUploaded: false,
   uploadedFontName: '',
+  extraFonts: [], // further imported fonts: {id, name, value:'__up:<id>', family}
   outputDirHandle: null,
   cropTool: false,
   tab: 'clean',
@@ -61,7 +62,20 @@ const UNIT_LABELS = {
   ru: {'Å':'Å','nm':'нм','µm':'мкм','mm':'мм','m':'м','nm⁻¹':'нм⁻¹','µm⁻¹':'мкм⁻¹','Å⁻¹':'Å⁻¹'},
 };
 const SERIF_FONTS = new Set(['Cambria','Times New Roman','Georgia','Palatino Linotype']);
-const OCR_WHITELIST = '0123456789.,µumnpyjlI ';
+const OCR_WHITELIST = '0123456789.,µumnpyjlI/ ';
+
+// Greek letters for the text toolbars ("Ω…" row): lower case with variant forms, then upper case.
+const GREEK_LOWER='αβγδεζηθικλμνξοπρστυφχψωϑϕςϵ', GREEK_UPPER='ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ';
+// Fill every empty .rt-greek row with insert buttons. Runs before the toolbar handlers are attached (modules 14 and 17).
+function rtGreekFill() {
+  const mk=c=>{ const b=document.createElement('button'); b.type='button'; b.className='rt-btn'; b.dataset.ins=c; b.title='Insert '+c; b.textContent=c; return b; };
+  document.querySelectorAll('.rt-greek').forEach(p=>{ if (p.childElementCount) return;
+    const br=document.createElement('span'); br.className='rt-greek-break';
+    p.append(...[...GREEK_LOWER].map(mk), br, ...[...GREEK_UPPER].map(mk)); });
+}
+rtGreekFill();
+// "Ω…" opens or closes the row of all Greek letters (text tools on every tab).
+function rtGreekToggle(b) { const p=b.parentElement.querySelector('.rt-greek'); if (!p) return; p.hidden=!p.hidden; b.setAttribute('aria-expanded',String(!p.hidden)); }
 
 // Short unique id for items and objects.
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`; }

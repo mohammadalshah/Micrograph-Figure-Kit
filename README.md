@@ -24,10 +24,13 @@ https://github.com/user-attachments/assets/01a5b0ca-9785-4df8-889f-1ac2fa1a53c9
 **Clean & annotate**
 - Detects the SEM info footer and crops it off.
 - Finds the original scale bar (solid bars, split bars, tick rulers such as JEOL, TESCAN and Hitachi S-3400) and reads its value with OCR.
-- Optical microscope images: finds a bar drawn inside the picture, including bars on a label plate.
+- Optical, TEM and STEM images: finds a bar drawn inside the picture, grey or coloured, including bars on a label plate; reads reciprocal labels such as "2 1/nm" on diffraction patterns.
 - **Pick bar**: drag a box around any scale bar the automatic search missed; the tool measures it, reads the label and replaces it.
 - Draws a new scale bar with a round value, in your font, size, color, thickness and position.
 - Panel letters ((a), (b)… or custom), text, arrows, lines, shapes and zoom insets.
+- Contrast outline with its own color for the scale bar, unit and panel letters.
+- Zoom insets with fill color; an inset can be sent to Compose as a separate panel, linked to its source area by connector lines.
+- Greek letters (lower and upper case) in all text tools; several font files can be imported.
 - Free rotation of text and shapes (Shift snaps to 15°), Ctrl+click multi-select with align and distribute.
 - Brush eraser with adjustable size; Alt+click picks a color from the image.
 - Crop, brightness, contrast and sharpness per image, with batch apply.
@@ -38,13 +41,17 @@ https://github.com/user-attachments/assets/01a5b0ca-9785-4df8-889f-1ac2fa1a53c9
 **Compose figure**
 - Lays out processed images in rows (equal row height, equal cells, or free placement) at a set print width and dpi.
 - Panel letters inside or outside the images; scale text at true point size.
+- Panel letters can be dragged to any place inside or outside the panels.
+- Table layout: panels in cells with grid lines, header cells on any side with rich text, rotated side headers and merged headers.
+- Inset panels with connector lines; they follow changes made to the inset in the Clean tab.
 - Text, shapes and arrows over the whole figure; Ctrl+click align of panels.
 - Export as PNG with dpi information, uncompressed TIFF, PDF, SVG, CSV, or copy to the clipboard for Word and PowerPoint.
 
 **EDS maps**
-- Extracts element maps, the electron image and spectra from Oxford AZtec Word reports (.docx) or image files.
+- Extracts element maps, the electron image and spectra from Oxford AZtec Word reports (.docx) or image files. Each report is loaded as its own group with its own settings.
 - Reads element names and the scale bar, removes burned-in labels, and applies Word-style brightness, contrast and sharpness.
 - Reads element content (wt.% / at.%) from the report tables or the spectrum image.
+- Element labels, content and scale bars: position menu, drag on the preview or move with the keyboard; optional contrast outline.
 - Builds a map figure (PNG, PDF, SVG, CSV, maps as ZIP), or sends maps to Compose as editable panels (Refresh updates them after EDS changes).
 
 **General**
@@ -81,12 +88,12 @@ src/
   styles.css          all styles
   js/00-header.js     overview of the data model and module list
   js/01-05-*.js       core helpers, units, libraries, font storage, image decoding
-  js/06-08-*.js       scale-bar detection, OCR, rendering
+  js/06-08-*.js       scale-bar detection (06a overlay bars), OCR, rendering
   js/09-14-*.js       Clean tab: ingestion, preview, downloads, canvas editing, events
-  js/15-16-*.js       Compose tab and per-image label editor
-  js/17*-*.js         EDS tab (17 maps, 17a element content, 17b export)
+  js/15*-16-*.js      Compose tab (15a table, 15b export) and per-image label editor
+  js/17*-*.js         EDS tab (17 maps, 17a element content, 17b export, 17c groups, 17d preview interaction)
   js/18-startup.js    start-up
-  js/20-26-*.js       session files, undo/redo, batch apply, shortcuts, measurements, EN/RU text, vector SVG export
+  js/20-27-*.js       session files, undo/redo, batch apply, shortcuts, measurements, EN/RU text (25a Russian dictionary), vector SVG export, About window
   js/offline-ocr.js   starts the embedded OCR worker without network access
 vendor/               unmodified third-party libraries (see vendor/README.md)
 build.js              assembles Micrograph_Figure_Kit.html from src/ and vendor/
@@ -107,7 +114,7 @@ Module-by-module overview: [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md). Edit file
 
 If Micrograph Figure Kit contributed to an article, thesis, dissertation, report or presentation, please cite it as:
 
-> Alshah, M., & Kutzhanov, M. (2026). *Micrograph Figure Kit* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23318122
+> Alshah, M., & Kutzhanov, M. (2026). *Micrograph Figure Kit* (Version 1.1.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23318122
 
 ## License
 

@@ -21,7 +21,7 @@ async function addFiles(files) {
       item.analysis=analyzeImage(item.imageData);
       if (item.imageData.pages>1) item.analysis.notes.push('Multi-page TIFF: only the first page is used.');
       item.status='waiting';
-      if (item.analysis.overlay) { const p=item.analysis.overlay.pol; item.scaleStyle={...(item.scaleStyle||{}), hl:true, hlColor:p>0?'#000000':'#ffffff', color:p>0?'#ffffff':'#000000'}; }
+      if (item.analysis.overlay) item.scaleStyle={...(item.scaleStyle||{}), ...overlayScaleStyle(item.analysis.overlay)};
       if (!item.analysis.footerDetected && !item.analysis.bar) setPlain(item,true);
     } catch(e) { item.status='error'; item.error=e.message||String(e); }
     renderUI();

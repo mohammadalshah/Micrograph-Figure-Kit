@@ -209,10 +209,18 @@
             <span>Margin, % of width</span>
             <input id="rightMargin" type="number" min="0" max="20" step="0.1" value="1" />
           </label>
+          <label class="field">
+            <span>Outline color</span>
+            <input id="scaleOlColor" type="color" value="#000000" />
+          </label>
         </div>
         <label class="check-row">
           <input id="scaleHl" type="checkbox" />
           <span>Add a background highlight behind the bar and unit for better contrast</span>
+        </label>
+        <label class="check-row">
+          <input id="scaleOl" type="checkbox" />
+          <span>Add a contrast outline around the bar and unit</span>
         </label>
         <p class="hint" id="scaleExample">Example: 0.5 µm</p>
         <p class="hint">You can also drag the scale bar or the panel letter on the Result preview to place it anywhere on one image.</p>
@@ -273,7 +281,7 @@
         <div class="font-actions">
           <label class="btn ghost file-btn">
             Import font
-            <input id="fontInput" type="file" accept=".ttf,.otf,.woff,.woff2" />
+            <input id="fontInput" type="file" accept=".ttf,.otf,.woff,.woff2" multiple />
           </label>
           <button id="forgetFontBtn" class="btn ghost" type="button">Remove imported font</button>
         </div>
@@ -314,10 +322,18 @@
             <span>Highlight color</span>
             <input id="panelHlColor" type="color" value="#000000" />
           </label>
+          <label class="field">
+            <span>Outline color</span>
+            <input id="panelOlColor" type="color" value="#000000" />
+          </label>
         </div>
         <label class="check-row">
           <input id="panelHl" type="checkbox" />
           <span>Add a background highlight behind the letter</span>
+        </label>
+        <label class="check-row">
+          <input id="panelOl" type="checkbox" />
+          <span>Add a contrast outline around the letter</span>
         </label>
         <p class="hint">Write any text. A single letter such as <b>a</b>, <b>(a)</b>, <b>C)</b>, <b>а</b> or <b>(А)</b> continues automatically on the next images (b, c… or б, в… following GOST, without ё з й о ч ъ ы ь); any other text is used as written on every image. Override the letter of one image in <b>Scale label and panel letter on this image</b>; add free text with <b>+ Text</b> in <b>Text, shapes and arrows</b>.</p>
       </div>
@@ -339,7 +355,7 @@
           </label>
         </div>
         <div class="adv-foot">
-          <button id="advDefaultBtn" class="btn ghost icon-btn" type="button" title="Detection overlay off">Default</button>
+          <button id="advDefaultBtn" class="btn ghost icon-btn" type="button" title="Switch off all three options">Default</button>
         </div>
       </details>
 
@@ -348,7 +364,7 @@
           <div class="setting-title">Output files</div>
           <span id="outputFolderStatus" class="status-pill">Output folder: browser default</span>
         </div>
-        <p class="hint">Each processed image is saved as its own file, for example <code>Co-1_clean.png</code>. <b>TIFF</b>, <b>PDF</b> and <b>SVG</b> hold the same lossless image at 300 dpi. On Chrome/Edge desktop you can select an output folder once and save all files directly into it.</p>
+        <p class="hint">Each processed image is saved as its own file, for example <code>image-1_clean.png</code>. <b>TIFF</b>, <b>PDF</b> and <b>SVG</b> hold the same lossless image at 300 dpi. On Chrome/Edge desktop you can select an output folder once and save all files directly into it.</p>
         <div class="action-row">
           <button id="selectOutputFolderBtn" class="btn ghost" type="button">Select output folder</button>
           <button id="saveAllBtn" class="btn secondary" type="button" disabled>Save all PNGs separately</button>
@@ -637,6 +653,8 @@
                   <button type="button" class="rt-btn" data-wrap="sub" title="Subscript">x<sub>2</sub></button>
                   <span class="rt-sep"></span>
                   <button type="button" class="rt-btn" data-ins="µ" title="Insert µ">µ</button><button type="button" class="rt-btn" data-ins="°" title="Insert °">°</button><button type="button" class="rt-btn" data-ins="±" title="Insert ±">±</button><button type="button" class="rt-btn" data-ins="×" title="Insert ×">×</button><button type="button" class="rt-btn" data-ins="·" title="Insert ·">·</button><button type="button" class="rt-btn" data-ins="Å" title="Insert Å">Å</button><button type="button" class="rt-btn" data-ins="α" title="Insert α">α</button><button type="button" class="rt-btn" data-ins="β" title="Insert β">β</button><button type="button" class="rt-btn" data-ins="γ" title="Insert γ">γ</button><button type="button" class="rt-btn" data-ins="θ" title="Insert θ">θ</button><button type="button" class="rt-btn" data-ins="λ" title="Insert λ">λ</button><button type="button" class="rt-btn" data-ins="→" title="Insert →">→</button>
+                  <button type="button" class="rt-btn" data-greek-toggle aria-expanded="false" title="All Greek letters">Ω…</button>
+                  <div class="rt-greek" hidden></div>
                 </div>
                 <textarea id="objText" rows="2" placeholder="e.g. Co<sub>3</sub>O<sub>4</sub>"></textarea>
               </div>
@@ -650,8 +668,8 @@
                 <label class="field" data-for="arrow line"><span>Length, px</span><input id="objLen" type="number" min="4" step="1" /></label>
                 <label class="field" data-for="text shape arrow line"><span>Rotation, °</span><input id="objRot" type="number" min="-360" max="360" step="1" title="Turn the object around its centre. Arrows and lines: angle of the line (0 = pointing right)" /></label>
                 <label class="field" data-for="arrow"><span>Head size, px (0 = auto)</span><input id="objHead" type="number" min="0" max="500" step="1" /></label>
-                <label class="field" data-for="shape"><span>Fill color</span><input id="objFillColor" type="color" /></label>
-                <label class="field" data-for="shape"><span>Fill opacity, %</span><input id="objFillOpacity" type="number" min="0" max="100" step="5" /></label>
+                <label class="field" data-for="shape inset"><span>Fill color</span><input id="objFillColor" type="color" /></label>
+                <label class="field" data-for="shape inset"><span>Fill opacity, %</span><input id="objFillOpacity" type="number" min="0" max="100" step="5" /></label>
                 <label class="field" data-for="text"><span>Highlight color</span><input id="objBgColor" type="color" /></label>
                 <label class="field" data-for="text shape arrow line inset"><span>Outline color</span><input id="objOutlineColor" type="color" /></label>
               </div>
@@ -662,11 +680,15 @@
                 <label class="check-row" data-for="text"><input id="objStrike" type="checkbox" /><span>Strikethrough</span></label>
                 <label class="check-row" data-for="text"><input id="objBg" type="checkbox" /><span>Background highlight</span></label>
                 <label class="check-row" data-for="shape arrow line inset"><input id="objDashed" type="checkbox" /><span>Dashed line</span></label>
-                <label class="check-row" data-for="shape"><input id="objFill" type="checkbox" /><span>Fill</span></label>
+                <label class="check-row" data-for="shape inset"><input id="objFill" type="checkbox" /><span>Fill</span></label>
                 <label class="check-row" data-for="shape"><input id="objLock" type="checkbox" /><span>Keep square / circle</span></label>
                 <label class="check-row" data-for="arrow"><input id="objDouble" type="checkbox" /><span>Double-headed</span></label>
                 <label class="check-row" data-for="text shape arrow line inset"><input id="objOutline" type="checkbox" /><span>Contrast outline</span></label>
                 <label class="check-row" data-for="inset"><input id="objLines" type="checkbox" /><span>Connector lines</span></label>
+              </div>
+              <div id="insetSendRow" class="add-row" data-for="inset" style="margin-top:6px">
+                <button type="button" class="btn ghost" data-inset-send="letter" title="Adds the magnified area to Compose as a separate image (also listed in tab 1 for editing).">⧉ To Compose with panel letter</button>
+                <button type="button" class="btn ghost" data-inset-send="none" title="Adds the magnified area to Compose as a separate image (also listed in tab 1 for editing).">⧉ To Compose without letter</button>
               </div>
             </div>
             <p class="hint">Click an object on the Result preview to select it, drag to move, drag the handles to resize (hold <b>Shift</b> for a square/circle or 15° arrow steps). Arrow keys nudge the selected object, <b>Delete</b> removes it. In text, select characters and use the toolbar, or type <code>&lt;sub&gt;…&lt;/sub&gt;</code>, <code>&lt;sup&gt;</code>, <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, or the shortcuts <code>H_{2}O</code>, <code>m^{2}</code>. Enter starts a new line. The panel letter is enabled in <b>Panel letter</b> on the left.</p>
@@ -743,6 +765,40 @@
             <button type="button" class="btn ghost icon-btn" data-palign="samew" title="Give all selected panels the width of the first selected">Same width</button>
             <button type="button" class="btn ghost icon-btn" data-palign="sameh" title="Give all selected panels the height of the first selected">Same height</button>
           </div>
+        </div>
+      </div>
+
+      <div class="setting-card" id="compTblCard">
+        <div class="setting-title">Table</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button id="compTblAdd" class="btn secondary" type="button" title="Put the panels in a table with grid lines and header cells">⊞ Insert table</button>
+          <button id="compTblDel" class="btn ghost" type="button" hidden>Remove table</button>
+        </div>
+        <div id="compTblOpts" hidden>
+          <div class="font-grid" style="margin-top:8px">
+            <label class="field"><span>Rows</span><input id="compTblRows" type="number" min="1" max="20" step="1" /></label>
+            <label class="field"><span>Columns</span><input id="compTblCols" type="number" min="1" max="20" step="1" /></label>
+            <label class="field"><span>Line width, pt (0 = none)</span><input id="compTblLineW" type="number" min="0" max="10" step="0.25" /></label>
+            <label class="field"><span>Line color</span><input id="compTblLineColor" type="color" value="#000000" /></label>
+            <label class="field"><span>Cell padding, mm</span><input id="compTblPad" type="number" min="0" max="20" step="0.1" /></label>
+            <label class="field"><span>Header text color</span><input id="compTblTextColor" type="color" value="#000000" /></label>
+            <label class="field"><span>Header font</span><select id="compTblFont"></select></label>
+            <label class="field"><span>Header size, pt</span><input id="compTblSize" type="number" min="2" max="72" step="0.5" /></label>
+          </div>
+          <div class="check-grid">
+            <label class="check-row"><input id="compTblBold" type="checkbox" /><span>Bold</span></label>
+            <label class="check-row"><input id="compTblItalic" type="checkbox" /><span>Italic</span></label>
+            <label class="check-row"><input id="compTblRot" type="checkbox" /><span>Rotate left / right headers 90°</span></label>
+          </div>
+          <div class="setting-title" style="font-size:12px;margin-top:8px">Header sides</div>
+          <div class="check-grid">
+            <label class="check-row"><input id="compTblSide-top" type="checkbox" /><span>Top</span></label>
+            <label class="check-row"><input id="compTblSide-bottom" type="checkbox" /><span>Bottom</span></label>
+            <label class="check-row"><input id="compTblSide-left" type="checkbox" /><span>Left</span></label>
+            <label class="check-row"><input id="compTblSide-right" type="checkbox" /><span>Right</span></label>
+          </div>
+          <div id="compTblHdrs"></div>
+          <p class="hint">Drag a panel in the preview, or a row of the panel list, onto any cell; or click a panel and then a cell. Cells may stay empty. The number beside a header merges it over the next cells. Header text: <b>&lt;b&gt;</b>, <b>&lt;i&gt;</b>, H_{2}O, x^{2}, Greek as \alpha, \beta, \Omega; Enter for a new line.</p>
         </div>
       </div>
 
@@ -860,7 +916,7 @@
         <div id="compWrap" class="canvas-wrap checker">
           <canvas id="compCanvas"></canvas>
         </div>
-        <div class="preview-hint">Click a panel, then click another panel to swap them.</div>
+        <div class="preview-hint">Click a panel, then click another panel to swap them. Drag a panel letter to move it; double-click it to put it back.</div>
       </div>
     </section>
   </main>
@@ -882,6 +938,10 @@
         <span>or click to browse</span>
         <small>DOCX, BMP, PNG, JPG, WEBP, TIFF</small>
       </label>
+      <div id="edsGroupsWrap" style="margin-top:12px" hidden>
+        <p class="hint" style="margin:0 0 6px">Each report is a separate group with its own maps, scale and settings. Click a group to edit it.</p>
+        <div id="edsGroups" class="file-strip" style="flex-wrap:wrap"></div>
+      </div>
       <p class="hint">Images inside a .docx are extracted in document order and named from their captions (e.g. <b>Fe Kα1</b>, <b>Electron Image 1</b>, <b>Map Sum Spectrum</b>). Loose images are named from the file name (e.g. <b>Fe_Ka1.png</b>). Old .doc files must be re-saved as .docx.</p>
 
       <div id="edsList" class="comp-list"></div>
@@ -906,11 +966,16 @@
             <input id="edsColor" type="color" value="#ffffff" />
           </label>
         </div>
+        <div class="font-actions" style="margin-top:8px">
+          <button id="edsReread" class="btn ghost" type="button">Read label and scale again</button>
+        </div>
         <div class="rt-toolbar" id="edsLabelToolbar" style="margin-top:10px">
           <button type="button" class="rt-btn" data-wrap="sub" title="Subscript">x<sub>2</sub></button>
           <button type="button" class="rt-btn" data-wrap="sup" title="Superscript">x<sup>2</sup></button>
           <button type="button" class="rt-btn" data-ins="α" title="Insert α">α</button>
           <button type="button" class="rt-btn" data-ins="β" title="Insert β">β</button>
+          <button type="button" class="rt-btn" data-greek-toggle aria-expanded="false" title="All Greek letters">Ω…</button>
+          <div class="rt-greek" hidden></div>
         </div>
         <label class="field">
           <span>Label</span>
@@ -985,10 +1050,13 @@
           <label class="field"><span>Size, pt</span><input id="edsLabelPt" type="number" min="1" max="100" step="0.5" value="10" /></label>
           <label class="field"><span>Margin, % of width</span><input id="edsMargin" type="number" min="0" max="20" step="0.5" value="3" /></label>
           <label class="field"><span>Highlight color</span><input id="edsLabelHlColor" type="color" value="#000000" /></label>
+          <label class="field"><span>Outline color</span><input id="edsLabelOlColor" type="color" value="#000000" /></label>
+          <label class="field"><span>Position</span><select id="edsLabelPos"><option value="tl" selected>Upper left</option><option value="tc">Upper center</option><option value="tr">Upper right</option><option value="bl">Lower left</option><option value="bc">Lower center</option><option value="br">Lower right</option></select></label>
         </div>
         <label class="check-row"><input id="edsLabelBold" type="checkbox" checked /><span>Bold</span></label>
         <label class="check-row"><input id="edsLabelHl" type="checkbox" /><span>Background highlight behind the label</span></label>
-        <p class="hint">Labels sit in the upper-left corner of each map. The font family comes from the <b>Font</b> section in tab 1.</p>
+        <label class="check-row"><input id="edsLabelOl" type="checkbox" /><span>Contrast outline around element labels and content</span></label>
+        <p class="hint">Drag a label, content value or scale bar on the preview to move it on that map; double-click puts it back. Changing a Position resets the moved ones. The font family comes from the <b>Font</b> section in tab 1.</p>
       </div>
 
       <div class="setting-card">
@@ -996,12 +1064,13 @@
           <div class="setting-title">Element content</div>
           <span id="edsQStatus" class="status-pill">no values</span>
         </div>
-        <label class="check-row"><input id="edsQOn" type="checkbox" /><span>Write the content at the bottom center of each element map</span></label>
+        <label class="check-row"><input id="edsQOn" type="checkbox" /><span>Write the content on each element map</span></label>
         <div class="font-grid">
           <label class="field"><span>Show</span><select id="edsQBasis"><option value="wt" selected>Weight % (wt.%)</option><option value="at">Atomic % (at.%)</option></select></label>
           <label class="field"><span>Unit text</span><select id="edsQUnit"><option value="en" selected>wt.% / at.%</option><option value="ru">мас.% / ат.%</option><option value="pct">%</option></select></label>
           <label class="field"><span>Decimals</span><select id="edsQDec"><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option></select></label>
           <label class="field"><span>Size, pt</span><input id="edsQPt" type="number" min="1" max="100" step="0.5" value="9" /></label>
+          <label class="field"><span>Position</span><select id="edsQPos"><option value="tl">Upper left</option><option value="tc">Upper center</option><option value="tr">Upper right</option><option value="bl">Lower left</option><option value="bc" selected>Lower center</option><option value="br">Lower right</option></select></label>
         </div>
         <label class="field" style="margin-top:8px">
           <span>Values: element, wt.%, at.% (one per line)</span>
@@ -1049,6 +1118,7 @@
             </div>
           </label>
           <label class="field"><span>Size, pt</span><input id="edsScalePt" type="number" min="1" max="100" step="0.5" value="10" /></label>
+          <label class="field"><span>Position</span><select id="edsScalePos"><option value="tl">Upper left</option><option value="tc">Upper center</option><option value="tr">Upper right</option><option value="bl">Lower left</option><option value="bc">Lower center</option><option value="br" selected>Lower right</option></select></label>
         </div>
         <p class="hint">Maps share the field of view of the electron image, so one calibration covers all of them (scaled by pixel size if the map resolution differs). Bar style, color and unit language follow tab 1.</p>
       </div>
@@ -1112,9 +1182,9 @@
           <span id="edsDims" class="mono"></span>
         </div>
         <div class="canvas-wrap checker">
-          <canvas id="edsCanvas"></canvas>
+          <canvas id="edsCanvas" tabindex="0" aria-label="EDS figure preview. Select a map, then use the arrow keys to move its label, content value or scale bar; B switches between them, Home resets."></canvas>
         </div>
-        <div class="preview-hint">Click an image to select it and adjust its label, brightness and contrast.</div>
+        <div class="preview-hint">Click an image to select it and adjust its label, brightness and contrast. Drag labels, content values and scale bars to move them; double-click to reset. Keyboard: click the preview, then arrows move the box (Shift = larger steps), B switches the box, Home resets.</div>
       </div>
       <div id="edsWarn" class="warning" hidden></div>
     </section>
@@ -1134,6 +1204,7 @@
 <!--@include src/js/04-font-storage.js-->
 <!--@include src/js/05-decode.js-->
 <!--@include src/js/06-detection.js-->
+<!--@include src/js/06a-overlay-detection.js-->
 <!--@include src/js/07-ocr.js-->
 <!--@include src/js/08-render.js-->
 <!--@include src/js/09-ingest.js-->
@@ -1143,10 +1214,14 @@
 <!--@include src/js/13-canvas.js-->
 <!--@include src/js/14-clean-events.js-->
 <!--@include src/js/15-compose.js-->
+<!--@include src/js/15a-compose-table.js-->
+<!--@include src/js/15b-compose-export.js-->
 <!--@include src/js/16-label-editor.js-->
 <!--@include src/js/17-eds.js-->
 <!--@include src/js/17a-eds-quant.js-->
 <!--@include src/js/17b-eds-export.js-->
+<!--@include src/js/17c-eds-groups.js-->
+<!--@include src/js/17d-eds-canvas.js-->
 <!--@include src/js/18-startup.js-->
 </script>
 <script>
@@ -1155,6 +1230,7 @@
 <!--@include src/js/22-batch.js-->
 <!--@include src/js/23-shortcuts.js-->
 <!--@include src/js/24-measure.js-->
+<!--@include src/js/25a-i18n-ru.js-->
 <!--@include src/js/25-i18n.js-->
 <!--@include src/js/26-svg-export.js-->
 <!--@include src/js/27-about.js-->

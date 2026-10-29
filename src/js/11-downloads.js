@@ -156,7 +156,7 @@ function auditCSV() {
       a.bar?.x??'',a.bar?.y??'',originalBarPx(it),
       it.sourceScaleText,it.targetScaleText,m.label||'',it.ocrRaw||'',
       it.outputCanvas.width,it.outputCanvas.height,m.barW||'',m.thickness||'',
-      cfg.fontFamily==='__uploaded'?state.uploadedFontName:cfg.fontFamily,els.fontWeight.value,m.fontSize||''
+      importedFontName(cfg.fontFamily)||cfg.fontFamily,els.fontWeight.value,m.fontSize||''
     ]);
   }
   return '\uFEFF'+csvJoin(rows);

@@ -202,10 +202,12 @@ async function pickBarFromRect(it, r) {
   if (typeof histCheck==='function') histCheck();
   const a=it.analysis||(it.analysis={footerY:it.imageData.height, footerDetected:false, labelCands:[], notes:[]});
   a.overlay=ov; a.bar={x:ov.bar.x, y:ov.bar.y, w:ov.bar.w, h:ov.bar.h, kind:'picked'}; a.labelCands=ov.label?[ov.label]:[];
-  a.notes=(a.notes||[]).filter(n=>!/Scale bar was not detected|Optical-microscope scale bar found|Scale bar picked/.test(n));
+  a.notes=(a.notes||[]).filter(n=>!/Scale bar was not detected|Optical-microscope scale bar found|Coloured scale bar found|Scale bar picked/.test(n));
   a.notes.push('Scale bar picked by hand.');
   it._erased=null; it._base=null; it.barPxOverride=null; it.targetBarPx=null; it.plain=false; it.noScale=false; it.ocrDismissed=false;
-  if (!a.footerDetected) { const p=ov.pol; it.scaleStyle={...(it.scaleStyle||{}), hl:true, hlColor:p>0?'#000000':'#ffffff', color:p>0?'#ffffff':'#000000'}; }
+  // A box drawn above a detected footer means that footer was false (dark image with the bar at the bottom).
+  if (a.footerDetected && ov.erase.y<a.footerY) { a.footerY=it.imageData.height; a.footerDetected=false; a.threshold=null; }
+  if (!a.footerDetected) it.scaleStyle={...(it.scaleStyle||{}), ...overlayScaleStyle(ov)};
   setPickBar(false);
   if (typeof histSchedule==='function') histSchedule();
   if (ov.label) {

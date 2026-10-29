@@ -127,6 +127,10 @@ function settings() {
     scaleHlColor: els.scaleHlColor.value,
     panelHl: els.panelHl.checked,
     panelHlColor: els.panelHlColor.value,
+    scaleOl: els.scaleOl.checked,
+    scaleOlColor: els.scaleOlColor.value,
+    panelOl: els.panelOl.checked,
+    panelOlColor: els.panelOlColor.value,
   };
 }
 

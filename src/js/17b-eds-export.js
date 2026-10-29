@@ -49,7 +49,7 @@ edsEls.edsSaveMaps.onclick=async()=>{
 function edsMakeItem(name, canvas, opts) {
   const id=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
   return Object.assign({
-    id:uid(), fromEds:true, file:{name, size:0, lastModified:Date.now()}, name, status:'ok', error:'', imageData:id,
+    id:uid(), fromEds:true, edsBatch:eds.batch, file:{name, size:0, lastModified:Date.now()}, name, status:'ok', error:'', imageData:id,
     analysis:{footerY:id.height, footerDetected:false, bar:null, labelCands:[], notes:[]},
     sourceScaleText:'', sourceManual:true, targetScaleText:'', ocrRaw:'(EDS)', barPxOverride:null, targetBarPx:null, targetBarThicknessPx:null,
     crop:null, scalePos:null, panelLabel:'', objects:[], selObj:null, outputCanvas:null, outputBlob:null, renderMeta:null, noScale:true, noPanel:false,
@@ -61,7 +61,7 @@ function edsBuildMapItem(t, cfg, L) {
   const item=edsMakeItem('EDS '+edsFileName(t,cfg), c, {noPanel:t.role!=='electron', edsTile:t.id});
   const label=tileLabel(t,cfg), txtColor=cfg.labelColor==='map'?t.color:cfg.labelColor==='black'?'#000000':'#ffffff';
   const txtObj=(text,x,y,size)=>({id:uid(), type:'text', text, x, y, size, font:'', bold:cfg.labelBold, italic:false, underline:false, strike:false,
-    bg:cfg.labelHl, bgColor:cfg.labelHlColor, color:txtColor, outline:false, outlineColor:'#000000'});
+    bg:cfg.labelHl, bgColor:cfg.labelHlColor, color:txtColor, outline:cfg.labelOl, outlineColor:cfg.labelOlColor});
   if (label && t.role!=='spectrum') item.objects.push(txtObj(label,cfg.margin,cfg.margin,cfg.labelPt));
   // Element content (wt.% / at.%) as its own editable text; placed bottom-centre once its size is known.
   const qt=edsQuantText(t,cfg,settings()), qObj=qt?txtObj(qt,0.5,0.9,cfg.qPt):null;
@@ -78,12 +78,26 @@ function edsBuildFigItem() {
 }
 // Refresh in Compose: rebuild images sent from EDS with the current EDS settings.
 // Their place in the figure and panel letter are kept; edits made to them in tab 1 are replaced.
+// Each item is rebuilt from the group it was sent from (items from older versions without a group use the shown one).
 function edsRefreshSent() {
+  const home=edsGroupCur(), of=it=>it.edsBatch||home.id, ids=new Set(state.items.filter(i=>i.fromEds).map(of));
+  if (!ids.size) return 0;
+  let n=0;
+  if (edsAnalyzing) n=edsRefreshGroup(of);
+  else {
+    edsGroupStash();
+    for (const g of eds.groups) if (ids.has(g.id)) { if (g.id!==eds.batch) edsGroupLoad(g); n+=edsRefreshGroup(of); }
+    if (eds.batch!==home.id) { edsGroupLoad(home); renderEds(); }
+  }
+  if (n) renderUI();
+  return n;
+}
+function edsRefreshGroup(of) {
   if (!eds.tiles.length) return 0;
-  const cfg=edsCfg(), L=edsLayoutTiles(cfg), KEEP=['id','panelLabel','compLabel','noPanel','showPanel','panelStyle','scaleStyle','hideScale'];
+  const cfg=edsCfg(), L=edsLayoutTiles(cfg), KEEP=['id','panelLabel','compLabel','noPanel','showPanel','panelStyle','scaleStyle','hideScale','edsBatch'];
   let n=0;
   state.items.forEach((old,i)=>{
-    if (!old.fromEds) return;
+    if (!old.fromEds || of(old)!==eds.batch) return;
     let fresh=null;
     try {
       if (old.edsFig) { if (eds.tiles.some(t=>t.include)) fresh=edsBuildFigItem(); }
@@ -94,7 +108,6 @@ function edsRefreshSent() {
     try { renderInto(fresh); } catch (_) {}
     state.items[i]=fresh; n++;
   });
-  if (n) renderUI();
   return n;
 }
 edsEls.edsSendMaps.onclick=()=>{
@@ -109,4 +122,4 @@ edsEls.edsSendFig.onclick=()=>{
 };
 
 // Ask before closing while work is loaded (nothing is stored on a server, so closing loses it).
-window.addEventListener('beforeunload',e=>{ if (state.busy || state.items.length || eds.tiles.length) { e.preventDefault(); e.returnValue=''; } });
+window.addEventListener('beforeunload',e=>{ if (state.busy || state.items.length || edsHasAny()) { e.preventDefault(); e.returnValue=''; } });

@@ -83,6 +83,16 @@ function parseOCRScales(raw, optical=false) {
   s=s.replace(/(\d)\s*[.,:;'`’]+(?=\s*(?:[µuμpyjlI1i|]\s?m|nm|mm)(?![a-z]))/g,'$1');
   // OCR reads a lone "1" before the unit as l / I / | / ! (JEOL "1µm" → "lum", "lpm").
   s=s.replace(/(^|[\s|(\[])[lI|!](?=\s?[µuμpy]\s?m(?![a-z]))/g,(m0,p)=>p+'1');
+  // A lone "1" can also come out as "/" (the slash is allowed for reciprocal units).
+  s=s.replace(/(^|\s)\/(?=\s?[µuμ]\s?m(?![a-z]))/g,'$11');
+  // Reciprocal units on diffraction patterns: "2 1/nm", "5 1/µm" (the 1 may be read as l, I or |; "21/nm" is 2 1/nm).
+  const rre=/(\d+(?:[.,]\d+)?)\s*[1lI|!]\s?\/\s?(nm|[µuμ]\s?m)(?![a-z])/gi, rec=[]; let rm;
+  while ((rm=rre.exec(s))) {
+    const value=Number(rm[1].replace(',','.')); if (!(value>0 && value<10000)) continue;
+    const unit=/^n/i.test(rm[2]) ? 'nm⁻¹' : 'µm⁻¹';
+    rec.push({value, unit, text:`${trimZeros(String(value))} ${unit}`});
+  }
+  if (rec.length) return rec;
   const re=/(\d+(?:[.,]\d+)?)\s?(nm|mm|[µuμpyjlI1i|]\s?m)(?![a-z])/gi;
   const out=[]; let m;
   while ((m=re.exec(s))) {
@@ -100,6 +110,20 @@ function parseOCRScales(raw, optical=false) {
   return out;
 }
 
+// A glyph reaching well below the baseline of the label: only µ (and a decimal comma) has a descender among the
+// characters of a scale label, so a label read as “nm” whose mask has one is really µm (bold serif µ is often read as n).
+function maskHasDescender(L) {
+  if (!L?.mask) return false;
+  const bot=[]; for (let x=0;x<L.w;x++) { let b=-1; for (let y=L.h-1;y>=0;y--) if (L.mask[y*L.w+x]) { b=y; break; } if (b>=0) bot.push(b); }
+  if (bot.length<10) return false;
+  const s=[...bot].sort((a,b)=>a-b), base=s[Math.floor(s.length*0.5)];
+  return bot.filter(b=>b>base+0.1*L.h).length>=2;
+}
+// Overlay bars (optical images): “nm” with a descender in the label is µm.
+function fixOverlayUnit(m, L) {
+  if (m && m.unit==='nm' && maskHasDescender(L)) return {...m, unit:'µm', text:`${trimZeros(String(m.value))} µm`};
+  return m;
+}
 // Read the source scale of one item.
 async function readScaleOCR(item, progressCb=()=>{}) {
   const a=item.analysis, id=item.imageData;
@@ -107,6 +131,8 @@ async function readScaleOCR(item, progressCb=()=>{}) {
     const worker=await getOCRWorker(); ocrProgressCb=progressCb; const raws=[];
     try {
       const L=a.overlay.label;
+      // Coloured label: read it from the colour map (white text on black) instead of the photo.
+      const oid=a.overlay.color ? colorKeyImageData(id,a.overlay.color) : id;
       const P=a.overlay.pol, tries=[[P,200,'7',56],[P,230,'7',72],[P,170,'7',56],[P,200,'8',56],[0,200,'7',56],[P,200,'6',40]];
       let digits=null;
       // First: the clean glyph mask (only the label's own pixels), then thresholded crops.
@@ -114,16 +140,16 @@ async function readScaleOCR(item, progressCb=()=>{}) {
         await worker.setParameters({tessedit_pageseg_mode:psm, tessedit_char_whitelist:OCR_WHITELIST});
         const res=await worker.recognize(maskOCRCanvas(L,56));
         const raw=(res?.data?.text||'').replace(/\s+/g,' ').trim(); raws.push(raw);
-        const m=parseOCRScales(raw,true)[0];
+        const m=fixOverlayUnit(parseOCRScales(raw,true)[0],L);
         if (m) return {raw, normalized:m.text, conf:res?.data?.confidence??null};
         const d=raw.match(/(?:^|\D)(\d{1,4}(?:[.,]\d+)?)(?!\d)/);
         if (!digits && d && Number(d[1].replace(',','.'))>0) digits={raw, v:d[1].replace(',','.')};
       }
       for (const [pol,thr,psm,th] of tries) {
         await worker.setParameters({tessedit_pageseg_mode:psm, tessedit_char_whitelist:OCR_WHITELIST});
-        const res=await worker.recognize(prepareOCRCanvas(id,L,th,L.h,pol,thr).canvas);
+        const res=await worker.recognize(prepareOCRCanvas(oid,L,th,L.h,pol,thr).canvas);
         const raw=(res?.data?.text||'').replace(/\s+/g,' ').trim(); raws.push(raw);
-        const m=parseOCRScales(raw,true)[0];
+        const m=fixOverlayUnit(parseOCRScales(raw,true)[0],L);
         if (m) return {raw, normalized:m.text, conf:res?.data?.confidence??null};
         const d=raw.match(/(?:^|\D)(\d{1,4}(?:[.,]\d+)?)(?!\d)/);
         if (!digits && d && Number(d[1].replace(',','.'))>0) digits={raw, v:d[1].replace(',','.')};

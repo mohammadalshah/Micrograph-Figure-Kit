@@ -5,9 +5,11 @@
 // =====================================================================
 function fontSpec(px, weight, italic, family) {
   let fam, generic;
+  const up=String(family||'').startsWith('__up:') ? state.extraFonts?.find(f=>f.value===family) : null;
   if (family==='__uploaded' && state.fontUploaded) { fam='"UploadedFont"'; generic='serif'; }
+  else if (up) { fam=`"${up.family}"`; generic='serif'; }
   else {
-    const f = family==='__uploaded' ? 'Times New Roman' : family;
+    const f = family==='__uploaded' || String(family||'').startsWith('__up:') ? 'Times New Roman' : family;
     fam=`"${f}"`; generic = SERIF_FONTS.has(f) ? 'Georgia, serif' : f==='Courier New' ? 'monospace' : 'Arial, sans-serif';
   }
   return `${italic?'italic ':''}${weight} ${Math.max(1,Math.round(px))}px ${fam}, ${generic}`;
@@ -169,17 +171,38 @@ function drawInset(ctx, o, src, snap, w, h) {
     const sx=src.x*w, sy=src.y*h, sW=Math.max(1,src.w*w), sH=Math.max(1,src.h*h);
     ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
     ctx.drawImage(snap, sx, sy, sW, sH, x, y, dw, dh);
-    if (o.lines!==false) {
-      const A=[[sx,sy],[sx+sW,sy],[sx,sy+sH],[sx+sW,sy+sH]], B=[[x,y],[x+dw,y],[x,y+dh],[x+dw,y+dh]];
-      const ins=(px,py,rx,ry,rw,rh)=>px>rx+0.5 && px<rx+rw-0.5 && py>ry+0.5 && py<ry+rh-0.5;
-      let segs=[];
-      for (let i=0;i<4;i++) { let ok=true; for (let t=0.03;t<0.98 && ok;t+=0.05) { const px=A[i][0]+(B[i][0]-A[i][0])*t, py=A[i][1]+(B[i][1]-A[i][1])*t; if (ins(px,py,sx,sy,sW,sH) || ins(px,py,x,y,dw,dh)) ok=false; } if (ok) segs.push(i); }
-      if (segs.length>2) { let best=[segs[0],segs[1]], bd=-1; for (const i of segs) for (const j of segs) if (i<j) { const d=Math.hypot(A[i][0]-A[j][0],A[i][1]-A[j][1])+Math.hypot(B[i][0]-B[j][0],B[i][1]-B[j][1]); if (d>bd) { bd=d; best=[i,j]; } } segs=best; }
-      if (segs.length) { ctx.lineCap='round'; stroke(()=>{ ctx.beginPath(); for (const i of segs) { ctx.moveTo(A[i][0],A[i][1]); ctx.lineTo(B[i][0],B[i][1]); } ctx.stroke(); }); }
-    }
+    if (o.fill) { ctx.globalAlpha=clamp(o.fillOpacity??25,0,100)/100; ctx.fillStyle=o.fillColor||o.color; ctx.fillRect(x,y,dw,dh); ctx.globalAlpha=1; }
+    if (o.lines!==false) insetConnectors(ctx,stroke,sx,sy,sW,sH,x,y,dw,dh);
   }
   stroke(()=>ctx.strokeRect(x+sw/2, y+sw/2, Math.max(1,dw-sw), Math.max(1,dh-sw)));
   ctx.restore();
+}
+// Two corner-to-corner lines between the source box and the magnified view that do not cross either box.
+function insetConnectors(ctx,stroke,sx,sy,sW,sH,x,y,dw,dh) {
+  const A=[[sx,sy],[sx+sW,sy],[sx,sy+sH],[sx+sW,sy+sH]], B=[[x,y],[x+dw,y],[x,y+dh],[x+dw,y+dh]];
+  const ins=(px,py,rx,ry,rw,rh)=>px>rx+0.5 && px<rx+rw-0.5 && py>ry+0.5 && py<ry+rh-0.5;
+  let segs=[];
+  for (let i=0;i<4;i++) { let ok=true; for (let t=0.03;t<0.98 && ok;t+=0.05) { const px=A[i][0]+(B[i][0]-A[i][0])*t, py=A[i][1]+(B[i][1]-A[i][1])*t; if (ins(px,py,sx,sy,sW,sH) || ins(px,py,x,y,dw,dh)) ok=false; } if (ok) segs.push(i); }
+  if (segs.length>2) { let best=[segs[0],segs[1]], bd=-1; for (const i of segs) for (const j of segs) if (i<j) { const d=Math.hypot(A[i][0]-A[j][0],A[i][1]-A[j][1])+Math.hypot(B[i][0]-B[j][0],B[i][1]-B[j][1]); if (d>bd) { bd=d; best=[i,j]; } } segs=best; }
+  if (segs.length) { ctx.lineCap='round'; stroke(()=>{ ctx.beginPath(); for (const i of segs) { ctx.moveTo(A[i][0],A[i][1]); ctx.lineTo(B[i][0],B[i][1]); } ctx.stroke(); }); }
+}
+// Compose: an inset sent as its own panel keeps a frame and connector lines to its source box in the source panel.
+function drawComposeInsetLinks(ctx, cells) {
+  for (const cell of cells) {
+    const L=cell.it.insetLink; if (!L) continue;
+    const sc=cells.find(q=>q.it.id===cell.it.insetOf); if (!sc) continue;
+    const io=L.inset ? sc.it.objects?.find(q=>q.id===L.inset) : null; if (L.inset && !io) continue;
+    const st=io||L, r=sc.it.objects?.find(q=>q.id===(io?.src||L.rect)); if (!r) continue;
+    const k=sc.dw/Math.max(1,getCrop(sc.it).w), sw=Math.max(0.5,(st.sw||2)*k);
+    const stroke=(fn)=>{ const pass=(col,extra)=>{ ctx.strokeStyle=col; ctx.lineWidth=sw+extra*2; ctx.setLineDash(st.dashed?[sw*3,sw*2]:[]); fn(); };
+      if (st.outline) pass(st.outlineColor, Math.max(1,Math.round(sw*0.5))); pass(st.color,0); ctx.setLineDash([]); };
+    const sx=sc.dx+r.x*sc.dw, sy=sc.dy+r.y*sc.dh, sW=Math.max(1,r.w*sc.dw), sH=Math.max(1,r.h*sc.dh);
+    ctx.save();
+    if (st.fill) { ctx.globalAlpha=clamp(st.fillOpacity??25,0,100)/100; ctx.fillStyle=st.fillColor||st.color; ctx.fillRect(cell.dx,cell.dy,cell.dw,cell.dh); ctx.globalAlpha=1; }
+    if (st.lines!==false) insetConnectors(ctx,stroke,sx,sy,sW,sH,cell.dx,cell.dy,cell.dw,cell.dh);
+    if (st.frame!==false) stroke(()=>ctx.strokeRect(cell.dx+sw/2, cell.dy+sw/2, Math.max(1,cell.dw-sw), Math.max(1,cell.dh-sw)));
+    ctx.restore();
+  }
 }
 // Rotation of texts and shapes, degrees stored in o.rot, applied around the box centre.
 function objRotRad(o) { const r=Number(o.rot)||0; return r%360 ? r*Math.PI/180 : 0; }
@@ -216,6 +239,7 @@ function drawObjects(ctx, objects, w, h, cfg, ppt, defFs) {
       if (rot) ctx.restore();
       hits.push({kind:'obj', id:o.id, type:o.type, x:o.x*w, y:o.y*h, w:o.w*w, h:o.h*h, rot});
     } else if (o.type==='inset') {
+      if (insetSent(o)) continue;
       const src=objects.find(q=>q.id===o.src);
       if (src) { o.ar=Math.max(1,src.w*w)/Math.max(1,src.h*h); o.h=o.w*w/o.ar/h; }
       drawInset(ctx,o,src,snap,w,h);
@@ -276,14 +300,15 @@ function renderResult(item, ov) {
   if (!noScale && (boxW>w || boxH>h)) warnings.push('The scale annotation is larger than the image. Reduce the font size or the output scale.');
   bx=Math.round(clamp(bx,0,Math.max(0,w-boxW))); by=Math.round(clamp(by,0,Math.max(0,h-boxH)));
   if (pad && !noScale) { ctx.fillStyle=sSt.hlColor; ctx.fillRect(bx,by,boxW,boxH); }
-  const left=bx+pad, top=by+pad, ow=0;
+  const left=bx+pad, top=by+pad, ow=sSt.ol?Math.max(1,Math.round(fontSize*0.08)):0;
   const barX=Math.round(left+(groupW-barW)/2), textX=left+groupW/2;
   let barY, baseline;
   if (cfg.barBelow) { baseline=top+ascent; barY=top+ascent+descent+gap; }
   else { barY=top; baseline=top+thickness+gap+ascent; }
   if (!noScale) {
+    if (ow) { ctx.fillStyle=sSt.olColor; ctx.fillRect(barX-ow,barY-ow,barW+2*ow,thickness+2*ow); }
+    drawLabel(ctx,label,textX,baseline,font,'center',fg,sSt.olColor,ow);
     ctx.fillStyle=fg; ctx.fillRect(barX,barY,barW,thickness);
-    drawLabel(ctx,label,textX,baseline,font,'center',fg,edge,ow);
     hits.push({kind:'scale', x:bx, y:by, w:boxW, h:boxH});
   }
 
@@ -300,10 +325,11 @@ function renderResult(item, ov) {
       const mg=Math.round(cfg.panelMargin*w), pp=pSt.hl?Math.max(2,Math.round(ps*0.25)):0;
       const pw=tw+2*pp, ph=asc+des+2*pp;
       let px=mg, py=mg;
-      if (item.panelPos) { px=item.panelPos.x*w; py=item.panelPos.y*h; }
+      const pPos=cfg.panelPosOverride||item.panelPos; // Compose keeps its own letter positions
+      if (pPos) { px=pPos.x*w; py=pPos.y*h; }
       px=Math.round(clamp(px,0,Math.max(0,w-pw))); py=Math.round(clamp(py,0,Math.max(0,h-ph)));
       if (pp) { ctx.fillStyle=pSt.hlColor; ctx.fillRect(px,py,pw,ph); }
-      drawLabel(ctx,txt,px+pp+abl,py+pp+asc,pf,'left',pSt.color,edge,0);
+      drawLabel(ctx,txt,px+pp+abl,py+pp+asc,pf,'left',pSt.color,pSt.olColor,pSt.ol?Math.max(1,Math.round(ps*0.06)):0);
       hits.push({kind:'panel', x:px, y:py, w:pw, h:ph});
     }
   }
@@ -313,14 +339,15 @@ function renderResult(item, ov) {
 
   const a=item.analysis;
   if (a?.footerDetected && !item.plain && crop.y+crop.h>a.footerY) warnings.push('The crop includes part of the image footer.');
+  if (ov) canvas._hits=hits;
   if (!ov) item.renderMeta={ppt,barW,thickness,fontSize,left,top,right:left+groupW,bottom:top+groupH,scaleText,label,crop,hits,warnings};
   return canvas;
 }
 
 // Effective style for the scale label (k="scale") or panel letter (k="panel"): per-image override or global.
 function lblStyle(it,k,cfg) {
-  const s=it?.[k+'Style']||{}, g=k==='scale'?{hl:cfg.scaleHl,c:cfg.scaleHlColor}:{hl:cfg.panelHl,c:cfg.panelHlColor};
-  return {size:s.size>0?s.size:0, color:s.color||(cfg.color==='black'?'#000000':'#ffffff'), hl:s.hl??!!g.hl, hlColor:s.hlColor||g.c||'#000000'};
+  const s=it?.[k+'Style']||{}, g=k==='scale'?{hl:cfg.scaleHl,c:cfg.scaleHlColor,ol:cfg.scaleOl,oc:cfg.scaleOlColor}:{hl:cfg.panelHl,c:cfg.panelHlColor,ol:cfg.panelOl,oc:cfg.panelOlColor};
+  return {size:s.size>0?s.size:0, color:s.color||(cfg.color==='black'?'#000000':'#ffffff'), hl:s.hl??!!g.hl, hlColor:s.hlColor||g.c||'#000000', ol:s.ol??!!g.ol, olColor:s.olColor||g.oc||'#000000'};
 }
 // Render and store item.outputCanvas.
 function renderInto(item) {

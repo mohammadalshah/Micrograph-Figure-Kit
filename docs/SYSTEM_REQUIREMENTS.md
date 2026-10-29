@@ -6,10 +6,9 @@ Micrograph Figure Kit is a single HTML file that runs inside a web browser. Ther
 
 ## What you do **not** need
 
-- **Java** — not needed. The program is written in JavaScript, which is built into every browser. Java is a different, unrelated technology.
 - **Installation or administrator rights** — not needed. Copy the HTML file to any folder or USB stick and double-click it.
 - **Internet connection** — not needed. The page makes no network connections.
-- **.NET, Python, Node.js, MATLAB, ImageJ, Microsoft Office** — not needed. Node.js is used only by developers who rebuild the HTML file from `src/` (`node build.js`).
+- **Java, .NET, Python, Node.js, MATLAB, ImageJ, Microsoft Office** — not needed. Node.js is used only by developers who rebuild the HTML file from `src/` (`node build.js`).
 - **A graphics card / GPU** — not needed. Everything runs on the processor.
 
 ## Browser (the only real requirement)

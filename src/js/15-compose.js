@@ -10,13 +10,15 @@ Object.assign(els, {
   compSavePng: $('#compSavePng'), compSaveTif: $('#compSaveTif'), compCopy: $('#compCopy'), compSummary: $('#compSummary'),
   compEmpty: $('#compEmpty'), compCard: $('#compCard'), compDims: $('#compDims'), compCanvas: $('#compCanvas'),
 });
-const compose={order:[], off:new Set(), sel:-1, free:{}, srcCache:{}, lastAutoMode:'justify', cells:[], canvas:null, base:null, cfg:null, doc:{isFigure:true, objects:[], selObj:null, renderMeta:{hits:[]}}};
+// lposIn / lposOut: panel letters moved in Compose (inside: position in the panel, 0–1; outside: offset from the default place, in figure widths).
+const compose={lposIn:{}, lposOut:{}, letterHits:[], order:[], off:new Set(), sel:-1, free:{}, srcCache:{}, lastAutoMode:'justify', cells:[], canvas:null, base:null, cfg:null, doc:{isFigure:true, objects:[], selObj:null, renderMeta:{hits:[]}}};
 // Draw figure-wide objects on top of the composed panels.
 function finishCompose() {
   const base=compose.base; if (!base) return;
   const cv=compose.canvas && compose.canvas.width===base.width && compose.canvas.height===base.height ? compose.canvas : document.createElement('canvas');
   cv.width=base.width; cv.height=base.height;
   const ctx=cv.getContext('2d'); ctx.clearRect(0,0,cv.width,cv.height); ctx.drawImage(base,0,0);
+  drawComposeInsetLinks(ctx, compose.cells||[]);
   const cfg=settings(), ppt=compose.cfg.dpi/72;
   const hits=drawObjects(ctx, compose.doc.objects, cv.width, cv.height, cfg, ppt, Math.max(4,Math.round((cfg.fixedFontSize||12)*ppt)));
   compose.canvas=cv; compose.doc.renderMeta={hits, crop:{w:cv.width, h:cv.height}, ppt};
@@ -29,12 +31,14 @@ function syncCompose() {
   for (const id of ids) if (!compose.order.includes(id)) compose.order.push(id);
 }
 // Included items in figure order.
-function compItems() { return compose.order.filter(id=>!compose.off.has(id)).map(id=>state.items.find(i=>i.id===id)).filter(Boolean); }
+function compItemsAll() { return compose.order.filter(id=>!compose.off.has(id)).map(id=>state.items.find(i=>i.id===id)).filter(Boolean); }
+// With a table, panels come in cell order (panels that do not fit are left out).
+function compItems() { const a=compItemsAll(); compose.tblOver=0; return compose.table ? tblOrder(a) : a; }
 // Options from the Compose panel.
 function compCfg() {
   return {
     perRow: String(els.compPerRow.value).split(/[,;\s]+/).map(Number).filter(n=>n>=1).map(n=>Math.min(12,Math.round(n))),
-    mode: els.compMode.value, widthCm: Math.max(2,num(els.compWidth,17)), dpi: Number(els.compDpi.value)||300,
+    mode: compose.table?'table':els.compMode.value, widthCm: Math.max(2,num(els.compWidth,17)), dpi: Number(els.compDpi.value)||300,
     gapMm: Math.max(0,num(els.compGap,1)), marginMm: Math.max(0,num(els.compMargin,0)), bg: els.compBg.value,
     letters: els.compLetters.value, truePt: els.compTruePt.checked, letterPos: $('#compLetterPos')?.value||'inside',
   };
@@ -43,6 +47,7 @@ function compCfg() {
 function layoutCompose(items, c) {
   const W=Math.round(c.widthCm/2.54*c.dpi), gap=Math.round(c.gapMm/25.4*c.dpi), m=Math.round(c.marginMm/25.4*c.dpi), inner=W-2*m;
   const pattern=c.perRow.length?c.perRow:[2], bt=c.band?.top||0, bl=(c.band?.left||0)+(c.band?.right||0), bo=c.band?.left||0;
+  if (c.mode==='table') return layoutTable(items,c);
   const asp=it=>{ const cr=getCrop(it); return cr.w/cr.h; };
   if (c.mode==='free') {
     const cells=items.map(it=>{ const f=compose.free[it.id]||{x:0,y:0,w:0.5}, x=f.x*W, y=f.y*W, w=f.w*W, h=w/asp(it); return {it, x, y, w, h, dx:x, dy:y, dw:w, dh:h}; });
@@ -76,12 +81,12 @@ function layoutCompose(items, c) {
 }
 // Build the whole figure canvas.
 function renderCompose(fast) {
-  fast=fast===true; syncCompose(); if (!fast) { compose.srcCache={}; renderCompList(); if (state.tab==='compose') renderObjList(compose.doc); }
+  fast=fast===true; if (!fast) insetRefreshSent(false); syncCompose(); if (!fast) { compose.srcCache={}; renderCompList(); if (state.tab==='compose') renderObjList(compose.doc); }
   const items=compItems(), has=items.length>0;
   els.compEmpty.hidden=has; els.compCard.hidden=!has;
   [els.compSavePng,els.compSaveTif,els.compCopy].forEach(b=>b.disabled=!has);
   if (!has) { compose.canvas=null; compose.cells=[]; els.compSummary.textContent=compose.order.length?'All panels are excluded.':'No panels yet.'; return; }
-  const c=compCfg(); if (c.mode==='free') ensureFree(items,c); else compose.lastAutoMode=c.mode;
+  const c=compCfg(); if (c.mode==='free') ensureFree(items,c); else if (c.mode!=='table') compose.lastAutoMode=c.mode;
   $('#compResetFree').hidden=c.mode!=='free';
   // Panel letters outside the images: reserve a band above or to the left of each panel.
   let lp=null;
@@ -95,7 +100,7 @@ function renderCompose(fast) {
     lp={font, txts, asc, des, g, color:c.bg==='black'?'#ffffff':'#000000'};
     c.band=c.letterPos.startsWith('above')?{top:asc+des+g, left:0, right:0}:c.letterPos==='right'?{top:0, left:0, right:tw+g}:{top:0, left:tw+g, right:0};
   }
-  const L=layoutCompose(items,c);
+  const L=layoutCompose(items,c), letterHits=[];
   const cv=document.createElement('canvas'); cv.width=L.W; cv.height=L.H;
   const ctx=cv.getContext('2d');
   if (c.bg!=='transparent') { ctx.fillStyle=c.bg==='black'?'#000':'#fff'; ctx.fillRect(0,0,cv.width,cv.height); }
@@ -106,26 +111,35 @@ function renderCompose(fast) {
     if (c.letters==='none') { ov.panelEnabled=false; ov.forceNoPanel=true; }
     else if (c.letters==='renumber') { ov.panelEnabled=true; ov.panelIndex=idx; ov.ignorePanelLabel=true; if (cell.it.compLabel) ov.labelOverride=cell.it.compLabel; }
     if (lp) { ov.panelEnabled=false; ov.forceNoPanel=true; }
+    else if (compose.lposIn[cell.it.id]) ov.panelPosOverride=compose.lposIn[cell.it.id];
     let src=fast?compose.srcCache[cell.it.id]:null;
     if (!src) { try { src=renderResult(cell.it,ov); } catch (_) { src=cell.it.outputCanvas; } compose.srcCache[cell.it.id]=src; }
     ctx.drawImage(src, Math.round(cell.dx), Math.round(cell.dy), Math.round(cell.dw), Math.round(cell.dh));
+    const ph=!lp && src._hits?.find(h=>h.kind==='panel'), k=cell.dw/src.width;
+    if (ph) letterHits.push({id:cell.it.id, inside:true, x:cell.dx+ph.x*k, y:cell.dy+ph.y*k, w:ph.w*k, h:ph.h*k, k, sw:src.width, sh:src.height, px:ph.x, py:ph.y});
   });
+  compose.tblLayout=L.table||null; if (L.table) drawCompTable(ctx,L);
   if (lp) {
     ctx.save(); ctx.font=lp.font; ctx.fillStyle=lp.color; ctx.textBaseline='alphabetic'; ctx.textAlign='left';
     L.cells.forEach((cell,idx)=>{ const t=lp.txts[idx]; if (!t) return; const mt=ctx.measureText(t), abl=mt.actualBoundingBoxLeft||0, tw=(mt.actualBoundingBoxRight??mt.width)+abl;
       const P=c.letterPos, top=Math.round(Math.max(lp.asc, cell.dy-lp.g-lp.des));
-      if (P==='above') ctx.fillText(t, Math.round(cell.dx+abl), top);
-      else if (P==='aboveC') ctx.fillText(t, Math.round(cell.dx+(cell.dw-tw)/2+abl), top);
-      else if (P==='aboveR') ctx.fillText(t, Math.round(cell.dx+cell.dw-tw+abl), top);
-      else if (P==='right') ctx.fillText(t, Math.round(Math.min(cv.width-tw, cell.dx+cell.dw+lp.g)+abl), Math.round(cell.dy+lp.asc));
-      else ctx.fillText(t, Math.round(Math.max(abl, cell.dx-c.band.left+abl)), Math.round(cell.dy+lp.asc)); });
+      let x, y;
+      if (P==='above') { x=cell.dx+abl; y=top; }
+      else if (P==='aboveC') { x=cell.dx+(cell.dw-tw)/2+abl; y=top; }
+      else if (P==='aboveR') { x=cell.dx+cell.dw-tw+abl; y=top; }
+      else if (P==='right') { x=Math.min(cv.width-tw, cell.dx+cell.dw+lp.g)+abl; y=cell.dy+lp.asc; }
+      else { x=Math.max(abl, cell.dx-c.band.left+abl); y=cell.dy+lp.asc; }
+      const o=compose.lposOut[cell.it.id];
+      if (o) { x=clamp(x+o.x*cv.width, abl, Math.max(abl, cv.width-tw+abl)); y=clamp(y+o.y*cv.width, lp.asc, Math.max(lp.asc, cv.height-lp.des)); }
+      ctx.fillText(t, Math.round(x), Math.round(y));
+      letterHits.push({id:cell.it.id, inside:false, x:Math.round(x)-abl, y:Math.round(y)-lp.asc, w:tw, h:lp.asc+lp.des}); });
     ctx.restore();
   }
-  compose.base=cv; compose.cells=L.cells; compose.cfg=c; finishCompose();
+  compose.base=cv; compose.cells=L.cells; compose.cfg=c; compose.letterHits=letterHits; finishCompose();
   if (compose.sel>=L.cells.length) compose.sel=-1;
   paintCompose();
   els.compDims.textContent=L.W+' × '+L.H+'px';
-  els.compSummary.textContent=items.length+' panel(s) • '+fmtNum(+c.widthCm.toFixed(1))+' × '+fmtNum(+(L.H/c.dpi*2.54).toFixed(1))+' cm at '+c.dpi+' dpi';
+  els.compSummary.textContent=items.length+' panel(s) • '+fmtNum(+c.widthCm.toFixed(1))+' × '+fmtNum(+(L.H/c.dpi*2.54).toFixed(1))+' cm at '+c.dpi+' dpi'+(compose.tblOver?' • '+compose.tblOver+' panel(s) do not fit the table: add rows or columns':'');
 }
 // Compose preview zoom: 1 = fit to window; larger values scroll inside the preview.
 const compZoom={z:1};
@@ -176,6 +190,7 @@ function compAlignInfo() {
   document.getElementById('compAlignInfo').textContent=n<2 ? 'Ctrl + click panels in the preview to select several and align them.' : n+' selected — aligned to the first one you picked (thick outline).';
 }
 function compAlign(kind) {
+  if (compose.table) { showToast('Panels in a table follow its cells. Remove the table to align them freely.'); return; }
   const items=compItems(); if (!items.length) return;
   const pm=compPMulti(); if (kind!=='fit' && pm.length<2) return;
   const c=compCfg();
@@ -217,6 +232,7 @@ function renderCompList() {
     const it=state.items.find(x=>x.id===id); if (!it?.outputCanvas) return;
     const off=compose.off.has(id), row=document.createElement('div');
     row.className='comp-row'+(id===selId?' active':'')+(off?' off':'');
+    if (compose.table) { row.draggable=true; row.title=window.semI18n?.t('Drag onto a table cell in the preview')??'Drag onto a table cell'; row.ondragstart=e=>{ e.dataTransfer.setData('text/x-mfk-panel',id); e.dataTransfer.effectAllowed='move'; }; }
     const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!off; cb.setAttribute('aria-label','Include '+it.name);
     cb.onchange=()=>{ if (cb.checked) compose.off.delete(id); else compose.off.add(id); compose.sel=-1; renderCompose(); };
     const th=document.createElement('canvas'); th.className='comp-thumb';
@@ -230,6 +246,13 @@ function renderCompList() {
     const mk=(t,dir)=>{ const b=document.createElement('button'); b.type='button'; b.className='btn ghost icon-btn'; b.textContent=t; b.disabled=(dir<0&&k===0)||(dir>0&&k===compose.order.length-1);
       b.onclick=()=>{ const j=k+dir; [compose.order[k],compose.order[j]]=[compose.order[j],compose.order[k]]; compose.sel=-1; renderCompose(); }; return b; };
     row.append(cb,th,nm,mk('↑',-1),mk('↓',1));
+    if (it.objects?.some(q=>q.type==='inset' && !insetSent(q))) {
+      const T=s=>window.semI18n?.t(s)??s;
+      [['⧉A',true,'Inset as a separate panel, with panel letter'],['⧉',false,'Inset as a separate panel, without letter']].forEach(([t,l,ti])=>{
+        const b=document.createElement('button'); b.type='button'; b.className='btn ghost icon-btn'; b.textContent=t; b.title=T(ti); b.setAttribute('aria-label',b.title);
+        b.onclick=()=>{ if (insetSendAll(it,l)) { compose.sel=-1; renderUI(); renderCompose(); showToast('Inset moved to Compose figure as a separate panel; connector lines link it to the dashed box.',4200); } };
+        row.append(b); });
+    }
     const rm=document.createElement('button'); rm.type='button'; rm.className='btn ghost icon-btn'; rm.textContent='✕';
     rm.title=window.semI18n?.t('Remove this image (also from the Clean & annotate tab)')??'Remove this image'; rm.setAttribute('aria-label',rm.title);
     rm.onclick=()=>{ compose.sel=-1; compose.off.delete(id); removeItem(id); renderCompose(); };
@@ -249,11 +272,12 @@ function scheduleCompose(d=150) { clearTimeout(compTimer); compTimer=setTimeout(
   el.addEventListener('change',()=>scheduleCompose(0));
   if (el.tagName==='INPUT' && el.type!=='checkbox') el.addEventListener('input',()=>scheduleCompose(250));
 });
-els.compRefreshBtn.onclick=()=>{ const n=edsRefreshSent(); renderCompose(); if (n) showToast(n+' EDS image(s) updated from the EDS maps tab.'); };
+els.compRefreshBtn.onclick=()=>{ const n=edsRefreshSent(), m=insetRefreshSent(true); if (m && !n) renderUI(); renderCompose();
+  if (n) showToast(n+' EDS image(s) updated from the EDS maps tab.'); else if (m) showToast(m+' inset panel(s) updated from the Clean & annotate tab.'); };
 // Select a panel, or swap with the previously selected one.
 function compCellAt(p) { for (let i=compose.cells.length-1;i>=0;i--) { const c=compose.cells[i]; if (p.x>=c.x && p.x<=c.x+c.w && p.y>=c.y && p.y<=c.y+c.h) return i; } return -1; }
 function panelCorners(c) { return [{id:'nw',x:c.dx,y:c.dy},{id:'ne',x:c.dx+c.dw,y:c.dy},{id:'sw',x:c.dx,y:c.dy+c.dh},{id:'se',x:c.dx+c.dw,y:c.dy+c.dh}]; }
-function panelHandleAt(p) { const c=compose.cells[compose.sel]; if (!c) return null; const r=9*displayK(els.compCanvas); return panelCorners(c).find(q=>Math.abs(p.x-q.x)<=r && Math.abs(p.y-q.y)<=r)||null; }
+function panelHandleAt(p) { const c=compose.cells[compose.sel]; if (!c || compose.table) return null; const r=9*displayK(els.compCanvas); return panelCorners(c).find(q=>Math.abs(p.x-q.x)<=r && Math.abs(p.y-q.y)<=r)||null; }
 // Free layout: positions stored as fractions of the figure width, height follows the aspect ratio.
 function seedFree(items,c,mode) { const L=layoutCompose(items,{...c,mode}); for (const cell of L.cells) compose.free[cell.it.id]={x:cell.dx/L.W, y:cell.dy/L.W, w:cell.dw/L.W}; }
 function ensureFree(items,c) {
@@ -266,13 +290,20 @@ function ensureFree(items,c) {
 function compPanelClick(p) {
   compose.pmulti=[];
   const i=compCellAt(p);
+  // Table: click a panel, then any cell (empty or not) to move or swap it.
+  if (compose.table) {
+    const s=tblSlotAt(p), cur=compose.cells[compose.sel];
+    if (cur && s && cur.slot!==s.s) { tblMove(cur.it.id,s.s); compose.sel=-1; renderCompose(); return; }
+    compose.sel=(i<0||compose.sel===i)?-1:i; paintCompose(); renderCompList(); return;
+  }
   if (i<0) { compose.sel=-1; paintCompose(); renderCompList(); return; }
   if (compose.sel>=0 && compose.sel!==i && compose.cfg?.mode!=='free') {
     const a=compose.cells[compose.sel].it.id, b=compose.cells[i].it.id, ia=compose.order.indexOf(a), ib=compose.order.indexOf(b);
     compose.order[ia]=b; compose.order[ib]=a; compose.sel=-1; renderCompose();
   } else { compose.sel=compose.sel===i?-1:i; paintCompose(); renderCompList(); }
 }
-let compDrag=null, compFrame=0, compPanelDrag=null;
+let compDrag=null, compFrame=0, compPanelDrag=null, compLetterDrag=null;
+const compLetterAt=p=>{ const m=6*displayK(els.compCanvas); return compose.letterHits.find(h=>p.x>=h.x-m && p.x<=h.x+h.w+m && p.y>=h.y-m && p.y<=h.y+h.h+m)||null; };
 $('#compResetFree').onclick=()=>{ compose.free={}; compose.sel=-1; renderCompose(); };
 els.compCanvas.addEventListener('pointerdown', e=>{
   state.lastCanvas='compose';
@@ -287,7 +318,15 @@ els.compCanvas.addEventListener('pointerdown', e=>{
   }
   if (!d) {
     const had=!!doc.selObj; doc.selObj=null; doc.multi=[]; if (had) renderObjList(doc);
-    const hq=panelHandleAt(p), i=hq?compose.sel:compCellAt(p);
+    const hq=panelHandleAt(p), lh=!hq && !(e.ctrlKey||e.metaKey||e.shiftKey) && compLetterAt(p);
+    // Panel letter: drag to move it; double-click puts it back in its default place.
+    if (lh) {
+      e.preventDefault();
+      els.compCanvas.setPointerCapture(e.pointerId);
+      compLetterDrag={h:lh, start:p, orig:{...(compose.lposOut[lh.id]||{x:0,y:0})}, W:compose.base.width};
+      return;
+    }
+    const i=hq?compose.sel:compCellAt(p);
     if (i>=0 && !hq && (e.ctrlKey||e.metaKey||e.shiftKey)) {
       const id=compose.cells[i].it.id, m=compPMulti(); if (!m.length && compose.cells[compose.sel]) m.push(compose.cells[compose.sel].it.id);
       const j=m.indexOf(id); if (j>=0) m.splice(j,1); else m.push(id); compose.pmulti=m;
@@ -306,9 +345,17 @@ els.compCanvas.addEventListener('pointermove', e=>{
   const doc=compose.doc; if (!compose.canvas) return;
   const p=canvasPoint(els.compCanvas,e);
   if (compPanelDrag) { compPanelMove(p,e); return; }
+  if (compLetterDrag) {
+    const d=compLetterDrag, h=d.h, dx=p.x-d.start.x, dy=p.y-d.start.y;
+    if (h.inside) { compose.lposIn[h.id]={x:clamp((h.px+dx/h.k)/h.sw,0,1), y:clamp((h.py+dy/h.k)/h.sh,0,1)}; delete compose.srcCache[h.id]; }
+    else compose.lposOut[h.id]={x:d.orig.x+dx/d.W, y:d.orig.y+dy/d.W};
+    if (!compFrame) compFrame=requestAnimationFrame(()=>{ compFrame=0; renderCompose(true); });
+    return;
+  }
   if (!compDrag) {
     const hd=findHandle(doc,p); if (hd) { els.compCanvas.style.cursor=HANDLE_CURSOR[hd.id]; return; }
     if (findHit(doc.renderMeta?.hits||[],p)) { els.compCanvas.style.cursor='move'; return; }
+    if (!panelHandleAt(p) && compLetterAt(p)) { els.compCanvas.style.cursor='move'; return; }
     const hq=panelHandleAt(p); els.compCanvas.style.cursor=hq?HANDLE_CURSOR[hq.id]:(compCellAt(p)>=0?'grab':'default'); return;
   }
   const d=compDrag;
@@ -319,12 +366,16 @@ els.compCanvas.addEventListener('pointermove', e=>{
   if (!compFrame) compFrame=requestAnimationFrame(()=>{ compFrame=0; finishCompose(); paintCompose(); syncObjProps(doc); });
 });
 const endCompDrag=()=>{
-  if (compPanelDrag) { const d=compPanelDrag; compPanelDrag=null; if (!d.moved) compPanelClick(d.start); else { cancelAnimationFrame(compFrame); compFrame=0; renderCompose(); } return; }
+  if (compLetterDrag) { compLetterDrag=null; cancelAnimationFrame(compFrame); compFrame=0; renderCompose(); return; }
+  if (compPanelDrag) { const d=compPanelDrag; compPanelDrag=null; if (!d.moved) compPanelClick(d.start);
+    else if (compose.table) { const s=tblSlotAt(d.last||d.start); if (s) tblMove(d.id,s.s); compose.sel=-1; renderCompose(); }
+    else { cancelAnimationFrame(compFrame); compFrame=0; renderCompose(); } return; }
   if (!compDrag) return; compDrag=null; renderObjList(compose.doc);
 };
 // Move / resize a panel; dragging in an automatic layout converts it to Free first.
 function compPanelMove(p,e) {
   const d=compPanelDrag, k=displayK(els.compCanvas);
+  if (compose.table) { d.last=p; if (!d.moved && Math.hypot(p.x-d.start.x,p.y-d.start.y)>=4*k) { d.moved=true; compose.sel=compose.cells.findIndex(c=>c.it.id===d.id); paintCompose(); } els.compCanvas.style.cursor='grabbing'; return; }
   if (!d.moved) {
     if (Math.hypot(p.x-d.start.x,p.y-d.start.y)<4*k) return;
     d.moved=true;
@@ -351,110 +402,7 @@ function compPanelMove(p,e) {
   }
   if (!compFrame) compFrame=requestAnimationFrame(()=>{ compFrame=0; renderCompose(true); });
 }
+els.compCanvas.addEventListener('dblclick', e=>{ if (!compose.canvas) return; const lh=compLetterAt(canvasPoint(els.compCanvas,e)); if (!lh) return;
+  delete compose.lposIn[lh.id]; delete compose.lposOut[lh.id]; delete compose.srcCache[lh.id]; renderCompose(); });
 els.compCanvas.addEventListener('pointerup', endCompDrag);
 els.compCanvas.addEventListener('pointercancel', endCompDrag);
-
-// ---- Figure export: PNG with dpi (pHYs chunk), uncompressed RGB TIFF, clipboard ----
-// CRC-32 used for the PNG pHYs chunk.
-function crc32(buf) {
-  let crc=0xFFFFFFFF;
-  for (let n=0;n<buf.length;n++) { let c=(crc^buf[n])&0xFF; for (let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; crc=(crc>>>8)^c; }
-  return (crc^0xFFFFFFFF)>>>0;
-}
-// Insert a pHYs chunk so Word inserts the PNG at the right size.
-async function pngWithDpi(blob, dpi) {
-  const b=new Uint8Array(await blob.arrayBuffer()), ppm=Math.round(dpi/0.0254);
-  const ch=new Uint8Array(21), dv=new DataView(ch.buffer);
-  dv.setUint32(0,9); ch.set([0x70,0x48,0x59,0x73],4); dv.setUint32(8,ppm); dv.setUint32(12,ppm); ch[16]=1; dv.setUint32(17,crc32(ch.subarray(4,17)));
-  return new Blob([b.subarray(0,33),ch,b.subarray(33)],{type:'image/png'});
-}
-// Uncompressed RGB TIFF with resolution tags.
-function tiffBlob(canvas, dpi, bg) {
-  const w=canvas.width, h=canvas.height, flat=document.createElement('canvas'); flat.width=w; flat.height=h;
-  const fc=flat.getContext('2d'); fc.fillStyle=bg==='black'?'#000':'#fff'; fc.fillRect(0,0,w,h); fc.drawImage(canvas,0,0);
-  const px=fc.getImageData(0,0,w,h).data;
-  const n=12, ifdSize=2+n*12+4, bpsOff=8+ifdSize, resOff=bpsOff+6, dataOff=resOff+16;
-  const buf=new ArrayBuffer(dataOff+w*h*3), dv=new DataView(buf);
-  dv.setUint8(0,0x49); dv.setUint8(1,0x49); dv.setUint16(2,42,true); dv.setUint32(4,8,true);
-  let p=8; dv.setUint16(p,n,true); p+=2;
-  const tag=(t,type,count,val)=>{ dv.setUint16(p,t,true); dv.setUint16(p+2,type,true); dv.setUint32(p+4,count,true); if (type===3&&count===1) dv.setUint16(p+8,val,true); else dv.setUint32(p+8,val,true); p+=12; };
-  tag(256,4,1,w); tag(257,4,1,h); tag(258,3,3,bpsOff); tag(259,3,1,1); tag(262,3,1,2); tag(273,4,1,dataOff);
-  tag(277,3,1,3); tag(278,4,1,h); tag(279,4,1,w*h*3); tag(282,5,1,resOff); tag(283,5,1,resOff+8); tag(296,3,1,2);
-  dv.setUint32(p,0,true);
-  dv.setUint16(bpsOff,8,true); dv.setUint16(bpsOff+2,8,true); dv.setUint16(bpsOff+4,8,true);
-  dv.setUint32(resOff,dpi,true); dv.setUint32(resOff+4,1,true); dv.setUint32(resOff+8,dpi,true); dv.setUint32(resOff+12,1,true);
-  const out=new Uint8Array(buf,dataOff);
-  for (let i=0,j=0;i<px.length;i+=4,j+=3) { out[j]=px[i]; out[j+1]=px[i+1]; out[j+2]=px[i+2]; }
-  return new Blob([buf],{type:'image/tiff'});
-}
-// ---- PDF / SVG / CSV export (built locally, no libraries) ----
-function flatRGB(canvas,bg) {
-  const w=canvas.width, h=canvas.height, f=document.createElement('canvas'); f.width=w; f.height=h;
-  const c=f.getContext('2d'); c.fillStyle=bg==='black'?'#000':'#fff'; c.fillRect(0,0,w,h); c.drawImage(canvas,0,0);
-  const px=c.getImageData(0,0,w,h).data, out=new Uint8Array(w*h*3);
-  for (let i=0,j=0;i<px.length;i+=4,j+=3) { out[j]=px[i]; out[j+1]=px[i+1]; out[j+2]=px[i+2]; }
-  return out;
-}
-async function zDeflate(bytes) { if (!window.CompressionStream) return null; try { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer()); } catch(_) { return null; } }
-// One-page PDF; the page is the printed size (px / dpi), the image is lossless.
-async function pdfBlob(canvas,dpi,bg) {
-  const w=canvas.width, h=canvas.height, f=n=>String(+n.toFixed(3)), pw=f(w/dpi*72), ph=f(h/dpi*72);
-  const raw=flatRGB(canvas,bg), z=await zDeflate(raw), data=z||raw, enc=new TextEncoder(), parts=[], offs=[]; let len=0;
-  const put=x=>{ const b=typeof x==='string'?enc.encode(x):x; parts.push(b); len+=b.length; };
-  const obj=(n,body)=>{ offs[n]=len; put(n+' 0 obj\n'); if (typeof body==='function') body(); else put(body); put('\nendobj\n'); };
-  const content='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';
-  put('%PDF-1.4\n'); put(new Uint8Array([37,226,227,207,211,10]));
-  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+pw+' '+ph+'] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
-  obj(4,()=>{ put('<< /Type /XObject /Subtype /Image /Width '+w+' /Height '+h+' /ColorSpace /DeviceRGB /BitsPerComponent 8'+(z?' /Filter /FlateDecode':'')+' /Length '+data.length+' >>\nstream\n'); put(data); put('\nendstream'); });
-  obj(5,'<< /Length '+content.length+' >>\nstream\n'+content+'\nendstream');
-  const xref=len; put('xref\n0 6\n0000000000 65535 f \n'+[1,2,3,4,5].map(n=>String(offs[n]).padStart(10,'0')+' 00000 n \n').join(''));
-  put('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
-  return new Blob(parts,{type:'application/pdf'});
-}
-// Raster SVG at the printed size (mm): fallback when vector export (26-svg-export.js) is not possible.
-async function svgBlob(canvas,dpi) {
-  const w=canvas.width, h=canvas.height, mm=v=>String(+(v/dpi*25.4).toFixed(2));
-  const url=await new Promise(async (res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(await canvasBlob(canvas)); });
-  return new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+mm(w)+'mm" height="'+mm(h)+'mm" viewBox="0 0 '+w+' '+h+'">\n<image width="'+w+'" height="'+h+'" xlink:href="'+url+'"/>\n</svg>\n'],{type:'image/svg+xml'});
-}
-function csvBlob(rows) { return new Blob(['\uFEFF'+csvJoin(rows)],{type:'text/csv'}); }
-async function saveOut(blobOrPromise,name) {
-  try { const blob=await blobOrPromise; let r=null;
-    if (state.outputDirHandle) { try { name=await freeDirName(state.outputDirHandle,name); await writeBlobToDirectory(state.outputDirHandle,blob,name); r={method:'directory'}; } catch(_) { r=null; } }
-    if (!r) r=await saveBlob(blob,name,blob.type); if (r.method!=='cancelled') showToast('Saved: '+name);
-  } catch(e) { showToast('Save failed: '+e.message,4200); }
-}
-const csvNum=v=>v==null||!isFinite(v)?'':String(+Number(v).toPrecision(6));
-async function saveFigure(kind) {
-  if (!compose.canvas) return;
-  const c=compose.cfg;
-  try {
-    let blob, name;
-    if (kind==='tif') { blob=tiffBlob(compose.canvas,c.dpi,c.bg); name='SEM_figure.tif'; }
-    else { blob=await pngWithDpi(await canvasBlob(compose.canvas),c.dpi); name='SEM_figure.png'; }
-    let r;
-    if (state.outputDirHandle) { try { name=await freeDirName(state.outputDirHandle,name); await writeBlobToDirectory(state.outputDirHandle,blob,name); r={method:'directory'}; } catch (_) { r=null; } }
-    if (!r) r=await saveBlob(blob,name,blob.type);
-    if (r.method!=='cancelled') showToast('Saved: '+name);
-  } catch (e) { showToast('Save failed: '+e.message,4200); }
-}
-els.compSavePng.onclick=()=>saveFigure('png');
-$('#compSavePdf').onclick=()=>{ if (!compose.canvas) { showToast('No panels yet.'); return; } saveOut(pdfBlob(compose.canvas,compose.cfg.dpi,compose.cfg.bg),'SEM_figure.pdf'); };
-$('#compSaveSvg').onclick=()=>{ if (!compose.canvas) { showToast('No panels yet.'); return; } saveOut(svgVector(()=>{ renderCompose(); return compose.canvas; },compose.cfg.dpi,compose.canvas),'SEM_figure.svg'); };
-$('#compSaveCsv').onclick=()=>{
-  if (!compose.cells.length) { showToast('No panels yet.'); return; }
-  const dpi=compose.cfg.dpi, mm=v=>csvNum(v/dpi*25.4), rows=[['Panel','File','Source scale','Output scale','µm per px (source)','X (mm)','Y (mm)','Width (mm)','Height (mm)']];
-  compose.cells.forEach((c,i)=>rows.push([i+1, c.it.name, c.it.sourceScaleText||'', c.it.targetScaleText||c.it.sourceScaleText||'', csvNum(measUmPerPx(c.it)), mm(c.dx), mm(c.dy), mm(c.dw), mm(c.dh)]));
-  rows.push([]); rows.push(['Figure', '', '', '', '', '', '', mm(compose.canvas?.width||0), mm(compose.canvas?.height||0)]);
-  saveOut(csvBlob(rows),'SEM_figure_panels.csv');
-};
-els.compSaveTif.onclick=()=>saveFigure('tif');
-els.compCopy.onclick=async()=>{
-  try {
-    const blob=await canvasBlob(compose.canvas);
-    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-    showToast('Figure copied. Paste it into Word or PowerPoint.');
-  } catch (e) { showToast('Copy is not allowed here; use Save PNG instead.',4200); }
-};

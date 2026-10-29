@@ -19,14 +19,15 @@ function histApplySettings(t) {
   for (const k of Object.keys(t)) {
     let el, v=t[k];
     if (k.startsWith('radio:')) { el=[...document.getElementsByName(k.slice(6))].find(r=>r.value===v); if (!el || el.checked) continue; el.checked=true; el.dispatchEvent(new Event('change',{bubbles:true})); continue; }
-    el=document.getElementById(k); if (!el) continue;
+    el=document.getElementById(k); if (!el || el.type==='file') continue;
+    if (el.tagName==='SELECT' && ![...el.options].some(o=>o.value===String(v))) continue;
     if (el.type==='checkbox') { if (el.checked===!!v) continue; el.checked=!!v; } else { if (el.value===String(v)) continue; el.value=v; }
     el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true}));
   }
 }
 function histSnap(tab) {
   let d, refs;
-  if (tab==='compose') d={order:compose.order, off:[...compose.off], free:sessPlain(compose.free), mode:compose.lastAutoMode, objects:sessPlain(compose.doc.objects||[])};
+  if (tab==='compose') d={order:compose.order, off:[...compose.off], free:sessPlain(compose.free), mode:compose.lastAutoMode, objects:sessPlain(compose.doc.objects||[]), lposIn:sessPlain(compose.lposIn), lposOut:sessPlain(compose.lposOut), table:compose.table?sessPlain(compose.table):null};
   else if (tab==='eds') { refs=new Map(eds.tiles.map(t=>[t.id,t])); d={tiles:eds.tiles.map(t=>sessPlain(t)), cal:sessPlain(eds.cal), calConf:eds.calConf??null, erase:sessPlain(eds.erase||[])}; }
   else { const list=state.items.filter(i=>i.imageData); refs=new Map(list.map(i=>[i.id,i]));
     d={items:list.map(it=>{ const o=sessPlain(it); o.status=it.status==='working'?'waiting':it.status; o.error=it.error||''; delete o.selObj; delete o.multi; return o; })}; }
@@ -44,7 +45,7 @@ function histApply(tab, snap) {
   const setChanged=!!d.settings && JSON.stringify(histPanelSettings(histView(tab)))!==JSON.stringify(d.settings);
   if (d.settings) histApplySettings(d.settings);
   if (tab==='compose') {
-    compose.order=d.order||[]; compose.off=new Set(d.off||[]); compose.free=d.free||{}; compose.lastAutoMode=d.mode||'justify';
+    compose.order=d.order||[]; compose.off=new Set(d.off||[]); compose.free=d.free||{}; compose.lastAutoMode=d.mode||'justify'; compose.lposIn=d.lposIn||{}; compose.lposOut=d.lposOut||{}; compose.table=tblSanitize(d.table); window.tblSyncUI?.();
     compose.doc.objects=d.objects||[]; if (!compose.doc.objects.some(o=>o.id===compose.doc.selObj)) compose.doc.selObj=null;
     compose.sel=-1; compose.srcCache={}; renderCompose(); renderObjList(compose.doc);
   } else if (tab==='eds') {

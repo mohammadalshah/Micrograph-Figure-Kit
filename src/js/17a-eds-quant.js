@@ -97,53 +97,72 @@ function repairQuantLines(lines) {
 // total is closest to 100 % (resolves 18.5 vs 19.5 type misreads).
 function pickQuant(passes, basis) {
   const key=basis==='wt'?'wt':'at', els={};
-  for (const p of passes) for (const [el,r] of Object.entries(p)) { const v=r[key]??r.wt??r.at; if (v==null) continue; (els[el]=els[el]||new Set()).add(v); }
+  for (const p of passes) for (const [el,r] of Object.entries(p)) { const v=r[key]??r.wt??r.at; if (v==null) continue; const s=(els[el]=els[el]||new Set()); s.add(v);
+    // A two-digit whole number is often a value whose decimal point was not read (“25” for 2.5).
+    if (Number.isInteger(v) && v>=10 && v<100) s.add(v/10); }
   const names=Object.keys(els).filter(el=>{ const n=passes.filter(p=>p[el]).length; return n>=Math.min(2,passes.length); });
   const cands=names.map(el=>[...els[el]]);
   let best=null, bestErr=Infinity, combos=cands.reduce((t,c)=>t*c.length,1);
-  if (combos>512) cands.forEach((c,i)=>cands[i]=[c[0]]);
+  if (combos>100000) cands.forEach((c,i)=>cands[i]=[c[0]]);
   const walk=(i,acc,sum)=>{ if (i===cands.length) { const e=Math.abs(100-sum); if (e<bestErr) { bestErr=e; best=acc.slice(); } return; } for (const v of cands[i]) { acc.push(v); walk(i+1,acc,sum+v); acc.pop(); } };
   walk(0,[],0);
   const out={}; names.forEach((el,i)=>{ const v=best?best[i]:cands[i][0]; out[el]=key==='wt'?{wt:v}:{at:v}; });
   return out;
 }
-async function edsReadQuantOCR() {
+// A result is complete when it has at least two elements and one column adds up to 100 % (within rounding).
+function quantComplete(rows) {
+  const v=Object.values(rows); if (v.length<2) return false;
+  const sum=k=>v.reduce((s,r)=>s+(r[k]??NaN),0);
+  return [sum('wt'),sum('at')].some(s=>Math.abs(s-100)<=0.4);
+}
+// silent: run after import; no toasts, and nothing is changed when no values are found.
+async function edsReadQuantOCR(silent=false) {
   const specs=eds.tiles.filter(t=>t.role==='spectrum');
-  if (!specs.length) { showToast('No spectrum found. Set an image type to “Spectrum”, or type the values in the box.',4500); return; }
-  const worker=await getOCRWorker(); let rows={}, basis='';
+  if (!specs.length) { if (!silent) showToast('No spectrum found. Set an image type to “Spectrum”, or type the values in the box.',4500); return false; }
+  const worker=await getOCRWorker(), gen=eds.gen; let rows={}, basis='';
   try {
-    await worker.setParameters({tessedit_pageseg_mode:'6', tessedit_char_whitelist:''});
+    await worker.setParameters({tessedit_pageseg_mode:'6', tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,%() '});
+    const regions=[[0.6,0,0.4,0.45],[0.5,0,0.5,0.6],[0,0,1,1]], thrs=[165,140,190];
     for (let i=0;i<specs.length;i++) {
-      edsProgress(i/specs.length,'Reading spectrum '+(i+1)+'/'+specs.length);
-      const s=specs[i].src;
-      for (const r of [[0.6,0,0.4,0.45],[0.5,0,0.5,0.6],[0,0,1,1]]) {
-        const passes=[]; let head='';
-        for (const thr of [165,140,190]) {
+      const s=specs[i].src; let step=0;
+      if (gen!==eds.gen) break;
+      for (const r of regions) {
+        if (gen!==eds.gen) break;
+        const passes=[]; let head='', done=null;
+        for (const thr of thrs) {
+          edsProgress((i+(step++)/(regions.length*thrs.length))/specs.length,'Reading spectrum '+(i+1)+'/'+specs.length+', pass '+step);
           const res=await worker.recognize(quantOCRCanvas(s,...r,thr));
           const lines=repairQuantLines(String(res?.data?.text||'').split('\n'));
           const got=parseQuantLines(lines);
-          if (Object.keys(got).length>=2) passes.push(got);
           head=head||lines.find(l=>/wt|\bat\b|\bar\b|at\.|ar\.|вес|мас|ат/i.test(l) && !/\d\.\d/.test(l) && /%|\(/.test(l))||'';
+          if (Object.keys(got).length<2) continue;
+          passes.push(got);
+          // Stop as soon as the values read so far add up to 100 %; the other thresholds are only needed when they do not.
+          if (quantComplete(got)) { done=got; break; }
+          const pk=pickQuant(passes,/(wt|вес|мас|weight)/i.test(head)?'wt':'at');
+          if (passes.length>=2 && quantComplete(pk)) { done=pk; break; }
         }
         if (!passes.length) continue;
         if (/(wt|вес|мас|weight)/i.test(head)) basis='wt'; else if (/(at|ar|ат)/i.test(head)) basis='at';
         const hasBoth=passes.some(p=>Object.values(p).some(v=>v.wt!=null&&v.at!=null));
-        rows={...(hasBoth?passes[0]:pickQuant(passes,basis||'wt')), ...rows};
+        rows={...(done||(hasBoth?passes[0]:pickQuant(passes,basis||'wt'))), ...rows};
         break;
       }
     }
   } finally { edsProgress(null); }
-  if (!Object.keys(rows).length) { showToast('No element percentages found in the spectrum image. Type the values in the box.',5500); return; }
+  if (gen!==eds.gen) return false; // Clear was pressed while reading
+  if (!Object.keys(rows).length) { if (!silent) showToast('No element percentages found in the spectrum image. Type the values in the box.',5500); return false; }
   edsSetQuant(rows,'spectrum'+(basis?' ('+(basis==='at'?'at.%':'wt.%')+')':''));
   if (basis) edsEls.edsQBasis.value=basis;
   edsEls.edsQOn.checked=true; renderEds();
-  showToast('Read '+Object.keys(rows).length+' element(s)'+(basis?' in '+(basis==='at'?'at.%':'wt.%'):'')+'. Please check the values.');
+  showToast('Read '+Object.keys(rows).length+' element(s)'+(basis?' in '+(basis==='at'?'at.%':'wt.%'):'')+' from the spectrum. Please check the values.',4500);
+  return true;
 }
 edsEls.edsQRead.onclick=()=>edsReadQuantOCR().catch(e=>showToast('Reading failed: '+(e.message||e),4000));
 edsEls.edsQText.addEventListener('input',()=>{ eds.quantSrc='edited'; edsSyncQuantStatus(); scheduleEds(); });
 ['edsQOn','edsQBasis','edsQUnit','edsQDec','edsQPt'].forEach(k=>{ edsEls[k].addEventListener('change',()=>scheduleEds(0)); edsEls[k].addEventListener('input',()=>scheduleEds()); });
 
-['edsRemove','edsShowBoxes','edsTrimT','edsTrimB','edsTrimL','edsTrimR','edsLabelStyle','edsLabelColor','edsLabelPt','edsMargin','edsLabelHlColor','edsLabelBold','edsLabelHl',
+['edsRemove','edsShowBoxes','edsTrimT','edsTrimB','edsTrimL','edsTrimR','edsLabelStyle','edsLabelColor','edsLabelPt','edsMargin','edsLabelHlColor','edsLabelBold','edsLabelHl','edsLabelOl','edsLabelOlColor',
  'edsScaleOn','edsScaleVal','edsScaleUnit','edsScalePt','edsLayout','edsCols','edsWidth','edsDpi','edsGap','edsBg'].forEach(k=>{
   const el=edsEls[k]; el.addEventListener('change',()=>scheduleEds(0));
   if (el.tagName==='INPUT' && el.type!=='checkbox') el.addEventListener('input',()=>scheduleEds(200));
